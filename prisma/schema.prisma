@@ -1,0 +1,401 @@
+// KrishiDam — Expanded Prisma Schema
+// Reverse Auction Platform for Bangladesh Rice Farmers
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── ENUMS ──────────────────────────────────────────────────
+
+enum Role {
+  farmer
+  mill
+  admin
+}
+
+enum LandType {
+  own
+  leased
+  both
+}
+
+enum CropType {
+  boro
+  aman
+  aus
+  other
+}
+
+enum QualityGrade {
+  A
+  B
+  C
+}
+
+enum ContactStatus {
+  pending
+  accepted
+  rejected
+  negotiating
+  deal_done
+  cancelled
+}
+
+enum PaymentMethod {
+  bkash
+  nagad
+  bank
+  cash
+}
+
+enum PaymentStatus {
+  pending
+  partial
+  completed
+}
+
+enum DeliveryStatus {
+  pending
+  in_transit
+  delivered
+  confirmed
+}
+
+enum CardType {
+  yellow
+  red
+}
+
+enum ReasonType {
+  price_revision
+  no_show
+  dispute
+  fraud
+  manual
+}
+
+enum Channel {
+  sms
+  push
+  in_app
+}
+
+// ─── USER & PROFILES ──────────────────────────────────────────
+
+model User {
+  id          String   @id @default(uuid()) @db.Uuid
+  phone       String   @unique
+  role        Role
+  name        String?
+  district    String?
+  upazila     String?
+  verified    Boolean  @default(false)
+  trustScore  Int      @default(100) @map("trust_score")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  farmerProfile         FarmerProfile?
+  millProfile           MillProfile?
+  
+  // Relations
+  listings              CropListing[]         @relation("FarmerListings")
+  contactRequestsAsMill ContactRequest[]      @relation("MillRequests")
+  contactRequestsAsFarmer ContactRequest[]    @relation("FarmerRequests")
+  messages              NegotiationMessage[]
+  transactionsAsFarmer  Transaction[]         @relation("FarmerTransactions")
+  transactionsAsMill    Transaction[]         @relation("MillTransactions")
+  priceRevisionsAsMill  PriceRevision[]       @relation("MillRevisions")
+  priceRevisionsAsAdmin PriceRevision[]       @relation("AdminRevisions")
+  inventories           MillInventory[]
+  govtPricesCreated     GovtPrice[]           @relation("GovtPricesCreated")
+  govtPricesUpdated     GovtPrice[]           @relation("GovtPricesUpdated")
+  notifications         NotificationLog[]
+  cardsAsMill           MillCard[]            @relation("MillCards")
+  cardsIssued           MillCard[]            @relation("CardsIssued")
+  cardsOverridden       MillCard[]            @relation("CardsOverridden")
+  adminActions          AdminAction[]         @relation("AdminActions")
+  platformSettings      PlatformSettings[]
+  suspendedMills        MillProfile[]         @relation("SuspendedBy")
+
+  @@map("users")
+}
+
+model FarmerProfile {
+  id             String    @id @db.Uuid
+  user           User      @relation(fields: [id], references: [id], onDelete: Cascade)
+  nidNumber      String?   @map("nid_number")
+  landType       LandType? @map("land_type")
+  primaryCrops   String[]  @map("primary_crops")
+  bankAccount    String?   @map("bank_account")
+  bkashNumber    String?   @map("bkash_number")
+  totalListings  Int       @default(0) @map("total_listings")
+  completedDeals Int       @default(0) @map("completed_deals")
+
+  @@map("farmer_profiles")
+}
+
+model MillProfile {
+  id               String    @id @db.Uuid
+  user             User      @relation(fields: [id], references: [id], onDelete: Cascade)
+  millName         String    @map("mill_name")
+  binNumber        String?   @map("bin_number")
+  licenseNumber    String?   @map("license_number")
+  capacityTon      Int?      @map("capacity_ton")
+  buyingPreferences Json?     @map("buying_preferences")
+  pushSubscription  Json?     @map("push_subscription")
+  publicVisible    Boolean   @default(true) @map("public_visible")
+  suspended        Boolean   @default(false)
+  suspensionReason String?   @map("suspension_reason")
+  suspendedBy      String?   @db.Uuid @map("suspended_by")
+  suspendedAt      DateTime? @map("suspended_at")
+
+  suspensionAdmin  User?     @relation("SuspendedBy", fields: [suspendedBy], references: [id])
+
+  @@map("mill_profiles")
+}
+
+// ─── CROP LISTINGS ────────────────────────────────────────────
+
+model CropListing {
+  id                String       @id @default(uuid()) @db.Uuid
+  farmerId          String       @db.Uuid @map("farmer_id")
+  farmer            User         @relation("FarmerListings", fields: [farmerId], references: [id])
+  cropType          CropType     @map("crop_type")
+  variety           String
+  quantityKg        Int          @map("quantity_kg")
+  qualityGrade      QualityGrade @map("quality_grade")
+  moisturePct       Decimal      @db.Decimal(5, 2) @map("moisture_pct")
+  chitaPct          Decimal      @db.Decimal(5, 2) @map("chita_pct")
+  harvestDate       DateTime     @db.Date @map("harvest_date")
+  availableDate     DateTime     @db.Date @map("available_date")
+  locationDistrict  String       @map("location_district")
+  locationUpazila   String       @map("location_upazila")
+  expectedMinPrice  Decimal      @db.Decimal(10, 2) @map("expected_min_price")
+  expectedMaxPrice  Decimal      @db.Decimal(10, 2) @map("expected_max_price")
+  aiFloorPrice      Decimal      @db.Decimal(10, 2) @map("ai_floor_price")
+  govtRefPrice      Decimal      @db.Decimal(10, 2) @map("govt_ref_price")
+  status            String       @default("active") // active | negotiating | sold | expired | cancelled
+  createdAt         DateTime     @default(now()) @map("created_at")
+  expiresAt         DateTime     @map("expires_at")
+
+  contactRequests   ContactRequest[]
+  transaction       Transaction?
+
+  @@map("crop_listings")
+}
+
+// ─── CONTACT REQUESTS & NEGOTIATION ────────────────────────────
+
+model ContactRequest {
+  id           String        @id @default(uuid()) @db.Uuid
+  listingId    String        @db.Uuid @map("listing_id")
+  listing      CropListing   @relation(fields: [listingId], references: [id])
+  millId       String        @db.Uuid @map("mill_id")
+  mill         User          @relation("MillRequests", fields: [millId], references: [id])
+  farmerId     String        @db.Uuid @map("farmer_id")
+  farmer       User          @relation("FarmerRequests", fields: [farmerId], references: [id])
+  offeredPrice Decimal       @db.Decimal(10, 2) @map("offered_price")
+  message      String?
+  status       String        @default("pending") // pending | accepted | rejected | negotiating | deal_done | cancelled
+  createdAt    DateTime      @default(now()) @map("created_at")
+
+  messages     NegotiationMessage[]
+  transaction  Transaction?
+
+  @@map("contact_requests")
+}
+
+model NegotiationMessage {
+  id           String         @id @default(uuid()) @db.Uuid
+  requestId    String         @db.Uuid @map("request_id")
+  request      ContactRequest @relation(fields: [requestId], references: [id])
+  senderId     String         @db.Uuid @map("sender_id")
+  sender       User           @relation(fields: [senderId], references: [id])
+  senderRole   String         @map("sender_role") // farmer | mill
+  message      String
+  priceOffered Decimal?       @db.Decimal(10, 2) @map("price_offered")
+  createdAt    DateTime       @default(now()) @map("created_at")
+
+  @@map("negotiation_messages")
+}
+
+// ─── TRANSACTIONS & DISPUTES ───────────────────────────────────
+
+model Transaction {
+  id              String         @id @default(uuid()) @db.Uuid
+  listingId       String         @unique @db.Uuid @map("listing_id")
+  listing         CropListing    @relation(fields: [listingId], references: [id])
+  requestId       String         @unique @db.Uuid @map("request_id")
+  request         ContactRequest @relation(fields: [requestId], references: [id])
+  farmerId        String         @db.Uuid @map("farmer_id")
+  farmer          User           @relation("FarmerTransactions", fields: [farmerId], references: [id])
+  millId          String         @db.Uuid @map("mill_id")
+  mill            User           @relation("MillTransactions", fields: [millId], references: [id])
+  cropType        String         @map("crop_type")
+  variety         String
+  quantityKg      Int            @map("quantity_kg")
+  agreedPrice     Decimal        @db.Decimal(10, 2) @map("agreed_price")
+  totalAmount     Decimal        @db.Decimal(10, 2) @map("total_amount")
+  paymentMethod   PaymentMethod  @map("payment_method")
+  paymentStatus   PaymentStatus  @default(pending) @map("payment_status")
+  deliveryStatus  DeliveryStatus @default(pending) @map("delivery_status")
+  finalPrice      Decimal        @db.Decimal(10, 2) @map("final_price")
+  priceRevised    Boolean        @default(false) @map("price_revised")
+  revisionReason  String?        @map("revision_reason")
+  farmerConfirmed Boolean        @default(false) @map("farmer_confirmed")
+  millConfirmed   Boolean        @default(false) @map("mill_confirmed")
+  publicRecord    Boolean        @default(true) @map("public_record")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  completedAt     DateTime?      @map("completed_at")
+
+  priceRevisions  PriceRevision[]
+  cards           MillCard[]
+
+  @@map("transactions")
+}
+
+model PriceRevision {
+  id              String      @id @default(uuid()) @db.Uuid
+  transactionId   String      @db.Uuid @map("transaction_id")
+  transaction     Transaction @relation(fields: [transactionId], references: [id])
+  millId          String      @db.Uuid @map("mill_id")
+  mill            User        @relation("MillRevisions", fields: [millId], references: [id])
+  originalPrice   Decimal     @db.Decimal(10, 2) @map("original_price")
+  revisedPrice    Decimal     @db.Decimal(10, 2) @map("revised_price")
+  reason          String
+  farmerDisputed  Boolean     @default(false) @map("farmer_disputed")
+  adminReviewed   Boolean     @default(false) @map("admin_reviewed")
+  adminRuling     String?     @map("admin_ruling")
+  adminReviewedBy String?     @db.Uuid @map("admin_reviewed_by")
+  adminReviewedAt DateTime?   @map("admin_reviewed_at")
+  createdAt       DateTime    @default(now()) @map("created_at")
+
+  adminReviewer   User?       @relation("AdminRevisions", fields: [adminReviewedBy], references: [id])
+
+  @@map("price_revisions")
+}
+
+// ─── MILL INVENTORY ───────────────────────────────────────────
+
+model MillInventory {
+  id            String    @id @default(uuid()) @db.Uuid
+  millId        String    @db.Uuid @map("mill_id")
+  mill          User      @relation(fields: [millId], references: [id])
+  riceType      String    @map("rice_type")
+  category      String    @map("category") // fine | medium | coarse | parboiled | aromatic
+  quantityKg    Int       @map("quantity_kg")
+  pricePerKg    Decimal   @db.Decimal(10, 2) @map("price_per_kg")
+  availableFrom DateTime  @db.Date @map("available_from")
+  notes         String?
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  publicVisible Boolean   @default(true) @map("public_visible")
+
+  @@map("mill_inventory")
+}
+
+// ─── REFERENCE PRICES & CACHE ──────────────────────────────────
+
+model GovtPrice {
+  id            String    @id @default(uuid()) @db.Uuid
+  cropType      String    @map("crop_type")
+  variety       String
+  pricePer40kg  Decimal   @db.Decimal(10, 2) @map("price_per_40kg")
+  pricePerKg    Decimal   @db.Decimal(10, 2) @map("price_per_kg")
+  season        String
+  effectiveFrom DateTime  @db.Date @map("effective_from")
+  effectiveTo   DateTime  @db.Date @map("effective_to")
+  source        String?
+  notes         String?
+  createdBy     String    @db.Uuid @map("created_by")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedBy     String?   @db.Uuid @map("updated_by")
+  updatedAt     DateTime? @updatedAt @map("updated_at")
+
+  creator       User      @relation("GovtPricesCreated", fields: [createdBy], references: [id])
+  updater       User?     @relation("GovtPricesUpdated", fields: [updatedBy], references: [id])
+
+  @@map("govt_prices")
+}
+
+model PriceFloorCache {
+  id              String   @id @default(uuid()) @db.Uuid
+  cropType        String   @map("crop_type")
+  variety         String
+  qualityGrade    String   @map("quality_grade")
+  district        String
+  calculatedFloor Decimal  @db.Decimal(10, 2) @map("calculated_floor")
+  factors         Json
+  validUntil      DateTime @map("valid_until")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@map("price_floor_cache")
+}
+
+// ─── LOGS & SETTINGS ───────────────────────────────────────────
+
+model NotificationLog {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @db.Uuid @map("user_id")
+  user       User      @relation(fields: [userId], references: [id])
+  channel    Channel
+  type       String
+  message    String
+  sentAt     DateTime  @default(now()) @map("sent_at")
+  delivered  Boolean   @default(false)
+
+  @@map("notification_log")
+}
+
+model MillCard {
+  id             String      @id @default(uuid()) @db.Uuid
+  millId         String      @db.Uuid @map("mill_id")
+  mill           User        @relation("MillCards", fields: [millId], references: [id])
+  cardType       CardType    @map("card_type")
+  reasonType     ReasonType  @map("reason_type")
+  transactionId  String?     @db.Uuid @map("transaction_id")
+  transaction    Transaction? @relation(fields: [transactionId], references: [id])
+  description    String
+  autoGenerated  Boolean     @default(true) @map("auto_generated")
+  issuedBy       String?     @db.Uuid @map("issued_by")
+  overridden     Boolean     @default(false)
+  overrideReason String?     @map("override_reason")
+  overriddenBy   String?     @db.Uuid @map("overridden_by")
+  overriddenAt   DateTime?   @map("overridden_at")
+  createdAt      DateTime    @default(now()) @map("created_at")
+
+  issuer         User?       @relation("CardsIssued", fields: [issuedBy], references: [id])
+  overrider      User?       @relation("CardsOverridden", fields: [overriddenBy], references: [id])
+
+  @@map("mill_cards")
+}
+
+model AdminAction {
+  id          String   @id @default(uuid()) @db.Uuid
+  adminId     String   @db.Uuid @map("admin_id")
+  admin       User     @relation("AdminActions", fields: [adminId], references: [id])
+  actionType  String   @map("action_type") // price_update, card_issued, card_overridden, mill_suspended, registration_approved, dispute_ruled
+  targetType  String   @map("target_type") // mill, farmer, transaction, govt_price
+  targetId    String   @db.Uuid @map("target_id")
+  description String
+  beforeValue Json?    @map("before_value")
+  afterValue  Json?    @map("after_value")
+  createdAt   DateTime @db.Timestamp @default(now()) @map("created_at")
+
+  @@map("admin_actions")
+}
+
+model PlatformSettings {
+  key         String    @id
+  value       String
+  description String?
+  updatedBy   String?   @db.Uuid @map("updated_by")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  updater     User?     @relation(fields: [updatedBy], references: [id])
+
+  @@map("platform_settings")
+}
