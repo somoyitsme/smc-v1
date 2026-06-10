@@ -249,7 +249,7 @@ const TRANSLATIONS = {
     otpPlaceholder: '৬ ডিজিটের কোড',
     verify: 'যাচাই করুন',
     changePhone: 'নম্বর পরিবর্তন করুন',
-    otpSentMsg: 'ওটিপি কোড পাঠানো হয়েছে! টেস্ট করুন "১২৩৪৫৬" দিয়ে অথবা কনসোলে দেখুন।',
+    otpSentMsg: 'আপনার মোবাইলে পাঠানো ওটিপি কোডটি লিখুন।',
 
     // New Features
     chat: 'চ্যাট ও মূল্য আলোচনা',
@@ -425,7 +425,7 @@ const TRANSLATIONS = {
     otpPlaceholder: '6-digit code',
     verify: 'Verify',
     changePhone: 'Change Phone',
-    otpSentMsg: 'OTP sent! Test with code "123456" or check developer console.',
+    otpSentMsg: 'Enter the OTP code sent to your mobile number.',
 
     // New Features
     chat: 'Negotiation Chat',
@@ -1291,7 +1291,10 @@ export default function KrishiDam() {
     }
   }
 
-  const formatTaka = (n: number) => `৳${n.toLocaleString('en-BD')}`
+  const formatTaka = (n: any) => {
+    if (n === null || n === undefined || isNaN(Number(n))) return '৳০'
+    return `৳${Number(n).toLocaleString('en-BD')}`
+  }
   const timeAgo = (date: string) => {
     const diff = Date.now() - new Date(date).getTime()
     const mins = Math.floor(diff / 60000)
