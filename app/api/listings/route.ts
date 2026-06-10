@@ -118,7 +118,7 @@ export async function GET(request: Request) {
         govtRefPrice: Number(l.govtRefPrice),
         district: l.locationDistrict,
         upazila: l.locationUpazila,
-        status: l.status.toUpperCase(),
+        status: l.status.toLowerCase(),
         expiresAt: l.expiresAt.toISOString(),
         createdAt: l.createdAt.toISOString(),
         farmer: {

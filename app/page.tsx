@@ -557,8 +557,16 @@ export default function KrishiDam() {
     setLoading(true)
     try {
       const res = await fetch('/api/listings')
+      if (!res.ok) {
+        addToast('error', lang === 'BN' ? 'লিস্টিং লোড করতে ব্যর্থ হয়েছে' : 'Failed to load listings')
+        return
+      }
       const data = await res.json()
-      setListings(data)
+      if (Array.isArray(data)) {
+        setListings(data)
+      } else {
+        addToast('error', lang === 'BN' ? 'লিস্টিং লোড করতে ব্যর্থ হয়েছে' : 'Failed to load listings')
+      }
     } catch {
       addToast('error', lang === 'BN' ? 'লিস্টিং লোড করতে ব্যর্থ হয়েছে' : 'Failed to load listings')
     } finally {
@@ -580,7 +588,9 @@ export default function KrishiDam() {
       const res = await fetch('/api/market?action=stats')
       if (!res.ok) return
       const data = await res.json()
-      setMarketStats(data)
+      if (data && typeof data === 'object' && !data.error) {
+        setMarketStats(data)
+      }
     } catch { /* silently fail */ }
   }, [])
 
@@ -623,8 +633,11 @@ export default function KrishiDam() {
   const fetchAnalyticsData = useCallback(async () => {
     try {
       const res = await fetch('/api/admin?action=analytics')
+      if (!res.ok) return
       const data = await res.json()
-      setAnalyticsData(data)
+      if (data && typeof data === 'object' && !data.error) {
+        setAnalyticsData(data)
+      }
     } catch { /* silently fail */ }
   }, [])
 
@@ -637,11 +650,26 @@ export default function KrishiDam() {
         fetch('/api/admin?action=price-floors'),
         fetch('/api/admin?action=cards'),
       ])
-      setAdminStats(await statsRes.json())
-      setMills(await millsRes.json())
-      setAuditLogs(await auditRes.json())
-      setPriceFloors(await priceRes.json())
-      setWarningCards(await cardsRes.json())
+      if (statsRes.ok) {
+        const d = await statsRes.json()
+        if (d && typeof d === 'object' && !d.error) setAdminStats(d)
+      }
+      if (millsRes.ok) {
+        const d = await millsRes.json()
+        if (Array.isArray(d)) setMills(d)
+      }
+      if (auditRes.ok) {
+        const d = await auditRes.json()
+        if (Array.isArray(d)) setAuditLogs(d)
+      }
+      if (priceRes.ok) {
+        const d = await priceRes.json()
+        if (Array.isArray(d)) setPriceFloors(d)
+      }
+      if (cardsRes.ok) {
+        const d = await cardsRes.json()
+        if (Array.isArray(d)) setWarningCards(d)
+      }
     } catch {
       addToast('error', lang === 'BN' ? 'অ্যাডমিন ডাটা লোড করতে ব্যর্থ হয়েছে' : 'Failed to load admin data')
     }
@@ -1718,7 +1746,7 @@ export default function KrishiDam() {
                         <div className="flex flex-wrap items-center gap-3">
                           <span className="text-lg font-black">{listing.variety}</span>
                           <span className={`px-2 py-0.5 rounded-full text-xs font-bold border uppercase ${
-                            listing.status === 'active' ? 'bg-brand-green/10 text-brand-green border-brand-green/20' : 'bg-text-secondary/10 text-text-secondary border-text-secondary/20'
+                            listing.status?.toLowerCase() === 'active' ? 'bg-brand-green/10 text-brand-green border-brand-green/20' : 'bg-text-secondary/10 text-text-secondary border-text-secondary/20'
                           }`}>{listing.status}</span>
                           <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-warning/10 text-warning border border-warning/20">{t.grade} {listing.qualityGrade}</span>
                         </div>
@@ -1880,8 +1908,8 @@ export default function KrishiDam() {
                 {[
                   { icon: <Package className="w-5 h-5 text-brand-green" />, value: listings.filter(l => l.farmer.id === authUser?.id).length, label: t.myActiveListings, color: 'text-brand-green bg-brand-green/10' },
                   { icon: <Gavel className="w-5 h-5 text-warning" />, value: listings.filter(l => l.farmer.id === authUser?.id).reduce((sum, l) => sum + (l.bids ? l.bids.length : 0), 0), label: t.totalBids, color: 'text-warning bg-warning/10' },
-                  { icon: <CheckCircle2 className="w-5 h-5 text-success" />, value: listings.filter(l => l.farmer.id === authUser?.id && l.status === 'sold').length, label: t.completedListings, color: 'text-success bg-success/10' },
-                  { icon: <Activity className="w-5 h-5 text-info" />, value: listings.filter(l => l.farmer.id === authUser?.id && l.status === 'active').length, label: t.active, color: 'text-info bg-info/10' },
+                  { icon: <CheckCircle2 className="w-5 h-5 text-success" />, value: listings.filter(l => l.farmer.id === authUser?.id && l.status?.toLowerCase() === 'sold').length, label: t.completedListings, color: 'text-success bg-success/10' },
+                  { icon: <Activity className="w-5 h-5 text-info" />, value: listings.filter(l => l.farmer.id === authUser?.id && l.status?.toLowerCase() === 'active').length, label: t.active, color: 'text-info bg-info/10' },
                 ].map((s, i) => (
                   <div key={i} className="bg-surface border border-text-secondary/10 rounded-custom p-6 shadow-sm flex items-center gap-4">
                     <div className={`w-12 h-12 rounded-custom flex items-center justify-center ${s.color}`}>{s.icon}</div>
@@ -1897,9 +1925,9 @@ export default function KrishiDam() {
               <div className="grid lg:grid-cols-3 gap-8">
                 {/* Active Listings overview */}
                 <div className="lg:col-span-2 flex flex-col gap-6">
-                  <h3 className="text-lg font-black">{t.myActiveListings} ({listings.filter(l => l.farmer.id === authUser?.id && l.status === 'active').length})</h3>
+                  <h3 className="text-lg font-black">{t.myActiveListings} ({listings.filter(l => l.farmer.id === authUser?.id && l.status?.toLowerCase() === 'active').length})</h3>
                   <div className="flex flex-col gap-4">
-                    {listings.filter(l => l.farmer.id === authUser?.id && l.status === 'active').slice(0, 3).map(listing => (
+                    {listings.filter(l => l.farmer.id === authUser?.id && l.status?.toLowerCase() === 'active').slice(0, 3).map(listing => (
                       <div key={listing.id} className="bg-surface border border-text-secondary/10 rounded-custom p-5 shadow-sm flex justify-between items-center flex-wrap gap-4">
                         <div>
                           <div className="font-bold text-sm text-text-primary">{listing.variety} ({listing.quantity} {t.maund})</div>
@@ -1916,7 +1944,7 @@ export default function KrishiDam() {
                         </button>
                       </div>
                     ))}
-                    {listings.filter(l => l.farmer.id === authUser?.id && l.status === 'active').length === 0 && (
+                    {listings.filter(l => l.farmer.id === authUser?.id && l.status?.toLowerCase() === 'active').length === 0 && (
                       <div className="bg-surface border border-text-secondary/10 rounded-custom p-6 text-center text-xs text-text-secondary italic">
                         {lang === 'BN' ? 'কোনো চলমান বিজ্ঞাপন নেই' : 'No active crop listings'}
                       </div>
@@ -2039,7 +2067,7 @@ export default function KrishiDam() {
                 <h2 className="text-xl font-black">{t.availableListings}</h2>
               </div>
               <div className="flex flex-col gap-4">
-                {listings.filter(l => l.status === 'active').map(listing => {
+                {listings.filter(l => l.status?.toLowerCase() === 'active').map(listing => {
                   const myBid = listing.bids ? listing.bids.find(b => b.mill.id === authUser?.id) : null
                   return (
                     <div key={listing.id} className="bg-surface border border-text-secondary/15 rounded-custom p-6 shadow-sm flex flex-col gap-4">
@@ -2098,7 +2126,7 @@ export default function KrishiDam() {
                   );
                 })}
 
-                {listings.filter(l => l.status === 'active').length === 0 && (
+                {listings.filter(l => l.status?.toLowerCase() === 'active').length === 0 && (
                   <div className="bg-surface border border-text-secondary/10 rounded-custom p-12 text-center">
                     <Package className="w-12 h-12 text-text-secondary/35 mx-auto mb-4" />
                     <h3 className="text-lg font-bold mb-1">{t.availableListings} নেই</h3>
@@ -2190,7 +2218,7 @@ export default function KrishiDam() {
               {/* Stats row */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
                 {[
-                  { icon: <Package className="w-5 h-5 text-brand-green" />, value: listings.filter(l => l.status === 'active').length, label: t.availableListings, color: 'text-brand-green bg-brand-green/10' },
+                  { icon: <Package className="w-5 h-5 text-brand-green" />, value: listings.filter(l => l.status?.toLowerCase() === 'active').length, label: t.availableListings, color: 'text-brand-green bg-brand-green/10' },
                   { icon: <Gavel className="w-5 h-5 text-warning" />, value: listings.filter(l => l.bids && l.bids.some(b => b.mill.id === authUser?.id)).length, label: t.myActiveBids, color: 'text-warning bg-warning/10' },
                   { icon: <Star className="w-5 h-5 text-success" />, value: '4.5', label: t.millRating, color: 'text-success bg-success/10' },
                   { icon: <CheckCircle2 className="w-5 h-5 text-info" />, value: '127', label: t.totalDeals, color: 'text-info bg-info/10' },
@@ -3013,7 +3041,7 @@ export default function KrishiDam() {
                       </tr>
                     </thead>
                     <tbody>
-                      {listings.filter(l => l.status === 'active').map(listing => (
+                      {listings.filter(l => l.status?.toLowerCase() === 'active').map(listing => (
                         <tr key={listing.id} className="border-b border-text-secondary/5 hover:bg-text-secondary/5 transition-all">
                           <td className="p-4 font-bold text-sm">{listing.variety}</td>
                           <td className="p-4 text-sm"><span className="px-2 py-0.5 rounded bg-brand-green/10 text-brand-green text-xs font-bold border border-brand-green/20">{listing.season}</span></td>
@@ -3027,7 +3055,7 @@ export default function KrishiDam() {
                           </td>
                         </tr>
                       ))}
-                      {listings.filter(l => l.status === 'active').length === 0 && (
+                      {listings.filter(l => l.status?.toLowerCase() === 'active').length === 0 && (
                         <tr>
                           <td colSpan={8} className="p-8 text-center text-text-secondary">
                             {lang === 'BN' ? 'কোনো সক্রিয় ধানের তালিকা পাওয়া যায়নি' : 'No active grain listings found'}
