@@ -14,27 +14,19 @@ const isFirebaseConfigured = Object.values(firebaseConfig).every(
   (value) => value && value.trim() !== ''
 )
 
-const isMockMode = !isFirebaseConfigured || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID === 'mock-project'
-
 let app: any
 let auth: any
 
 if (typeof window !== 'undefined') {
-  if (!isFirebaseConfigured) {
-    console.error(
-      'Firebase configuration is incomplete. Please set all NEXT_PUBLIC_FIREBASE_* environment variables.',
-      'Missing:',
-      Object.entries(firebaseConfig)
-        .filter(([, v]) => !v || (typeof v === 'string' && v.trim() === ''))
-        .map(([k]) => k)
-    )
-    auth = null
-  } else {
+  if (isFirebaseConfigured) {
     app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp()
     auth = getAuth(app)
+  } else {
+    console.error('Firebase configuration is incomplete. Real OTP verification will fail.')
+    auth = null
   }
 } else {
   auth = null
 }
 
-export { app, auth, isFirebaseConfigured, isMockMode }
+export { app, auth, isFirebaseConfigured }

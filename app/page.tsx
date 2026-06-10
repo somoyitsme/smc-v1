@@ -11,7 +11,7 @@ import {
   Sun, Moon, Languages, Phone, LogOut, Lock, MessageSquare, Trash2,
   Settings, CreditCard, Tag, DollarSign, PieChart
 } from 'lucide-react'
-import { auth, isFirebaseConfigured, isMockMode } from '@/lib/firebase'
+import { auth, isFirebaseConfigured } from '@/lib/firebase'
 import { RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult } from 'firebase/auth'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from 'recharts'
 
@@ -472,7 +472,7 @@ const TRANSLATIONS = {
 export default function KrishiDam() {
   const [role, setRole] = useState<Role>('LANDING')
   const [lang, setLang] = useState<Lang>('BN')
-  const [theme, setTheme] = useState<Theme>('dark')
+  const [theme, setTheme] = useState<Theme>('light')
   const [listings, setListings] = useState<Listing[]>([])
   const [toasts, setToasts] = useState<Toast[]>([])
   const [loading, setLoading] = useState(false)
@@ -541,27 +541,11 @@ export default function KrishiDam() {
 
   const t = TRANSLATIONS[lang]
 
-  // Setup Theme on Mount & Change
+  // Setup Theme on Mount (Always Force Light Mode)
   useEffect(() => {
-    const savedTheme = localStorage.getItem('theme') as Theme || 'dark'
-    setTheme(savedTheme)
-    if (savedTheme === 'dark') {
-      document.documentElement.classList.add('dark')
-    } else {
-      document.documentElement.classList.remove('dark')
-    }
+    setTheme('light')
+    document.documentElement.classList.remove('dark')
   }, [])
-
-  const toggleTheme = () => {
-    const nextTheme = theme === 'dark' ? 'light' : 'dark'
-    setTheme(nextTheme)
-    localStorage.setItem('theme', nextTheme)
-    if (nextTheme === 'dark') {
-      document.documentElement.classList.add('dark')
-    } else {
-      document.documentElement.classList.remove('dark')
-    }
-  }
 
   const addToast = useCallback((type: Toast['type'], message: string) => {
     const id = Date.now().toString()
@@ -881,33 +865,6 @@ export default function KrishiDam() {
     e.preventDefault()
     if (!authForm.phone) return
 
-    if (isMockMode) {
-      setAuthForm(prev => ({ ...prev, loading: true, error: '' }))
-      setTimeout(() => {
-        let formattedPhone = authForm.phone.trim()
-        if (!formattedPhone.startsWith('+880') && !formattedPhone.startsWith('880')) {
-          const cleanNumber = formattedPhone.replace(/^0+/, '')
-          formattedPhone = `+880${cleanNumber}`
-        } else if (formattedPhone.startsWith('880')) {
-          formattedPhone = `+${formattedPhone}`
-        }
-
-        const mockCode = '123456'
-        setAuthForm(prev => ({
-          ...prev,
-          step: 'otp',
-          phone: formattedPhone,
-          mockOtp: mockCode,
-          loading: false
-        }))
-        addToast('info', lang === 'BN'
-          ? `ডেভেলপমেন্ট মোড: ওটিপি কোড ${mockCode} ব্যবহার করুন`
-          : `Development Mode: Use OTP code ${mockCode}`
-        )
-      }, 500)
-      return
-    }
-
     if (!isFirebaseConfigured || !auth) {
       setAuthForm(prev => ({
         ...prev,
@@ -963,36 +920,22 @@ export default function KrishiDam() {
 
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!authForm.otp) return
-    if (!isMockMode && !confirmationResult) return
+    if (!authForm.otp || !confirmationResult) return
 
     setAuthForm(prev => ({ ...prev, loading: true, error: '' }))
     try {
-      let verifiedPhone: string
-      let token: string
+      // Confirm Firebase OTP
+      const result = await confirmationResult.confirm(authForm.otp)
+      const firebaseUser = result.user
 
-      if (isMockMode) {
-        if (authForm.otp !== authForm.mockOtp) {
-          throw { code: 'auth/invalid-verification-code', message: 'Incorrect OTP code' }
-        }
-        verifiedPhone = authForm.phone
-        token = 'mock-id-token'
-        setFirebaseIdToken(token)
-      } else {
-        // Confirm Firebase OTP
-        const result = await confirmationResult!.confirm(authForm.otp)
-        const firebaseUser = result.user
-
-        const phoneVal = firebaseUser.phoneNumber
-        if (!phoneVal) {
-          throw new Error('No phone number associated with this user')
-        }
-        verifiedPhone = phoneVal
-
-        // Retrieve Firebase ID Token
-        token = await firebaseUser.getIdToken()
-        setFirebaseIdToken(token)
+      const verifiedPhone = firebaseUser.phoneNumber
+      if (!verifiedPhone) {
+        throw new Error('No phone number associated with this user')
       }
+
+      // Retrieve Firebase ID Token
+      const token = await firebaseUser.getIdToken()
+      setFirebaseIdToken(token)
 
       const syncRes = await fetch('/api/auth/sync', {
         method: 'POST',
@@ -1399,7 +1342,7 @@ export default function KrishiDam() {
               <CreditCard className="w-4 h-4 text-brand-green" /> {lang === 'BN' ? 'মূল্য' : 'Pricing'}
             </button>
 
-            {/* Language & Theme Controls */}
+            {/* Language Controls */}
             <div className="flex items-center gap-1 border-l border-text-secondary/20 pl-4">
               <button 
                 onClick={() => setLang(l => l === 'BN' ? 'EN' : 'BN')}
@@ -1407,13 +1350,6 @@ export default function KrishiDam() {
                 title="Toggle Language"
               >
                 <Languages className="w-4 h-4" />
-              </button>
-              <button 
-                onClick={toggleTheme}
-                className="p-2 hover:bg-text-secondary/10 rounded-custom transition-all bg-transparent border-none cursor-pointer"
-                title="Toggle Light/Dark"
-              >
-                {theme === 'dark' ? <Sun className="w-4 h-4 text-warning" /> : <Moon className="w-4 h-4 text-info" />}
               </button>
             </div>
 
@@ -3201,16 +3137,7 @@ export default function KrishiDam() {
               </button>
             </div>
 
-            {isMockMode ? (
-              <div className="bg-amber-500/10 border border-amber-500/30 rounded-custom p-3 flex items-start gap-2">
-                <Info className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
-                <p className="text-xs text-amber-500 font-semibold leading-normal">
-                  {lang === 'BN'
-                    ? 'ডেভেলপমেন্ট মোড সক্রিয়: ওটিপি কোড "123456" দিয়ে যেকোনো মোবাইল নাম্বারে সাইন-ইন করতে পারবেন।'
-                    : 'Development Mock Mode is active. You can log in using any phone number with OTP code "123456".'}
-                </p>
-              </div>
-            ) : !isFirebaseConfigured && (
+            {!isFirebaseConfigured && (
               <div className="bg-error/10 border border-error/30 rounded-custom p-3 flex items-start gap-2">
                 <AlertTriangle className="w-4 h-4 text-error flex-shrink-0 mt-0.5" />
                 <p className="text-xs text-error font-semibold">
