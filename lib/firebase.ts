@@ -14,6 +14,8 @@ const isFirebaseConfigured = Object.values(firebaseConfig).every(
   (value) => value && value.trim() !== ''
 )
 
+const isMockMode = !isFirebaseConfigured || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID === 'mock-project'
+
 let app: any
 let auth: any
 
@@ -35,4 +37,4 @@ if (typeof window !== 'undefined') {
   auth = null
 }
 
-export { app, auth, isFirebaseConfigured }
+export { app, auth, isFirebaseConfigured, isMockMode }
