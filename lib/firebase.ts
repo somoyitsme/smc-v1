@@ -14,19 +14,10 @@ const isFirebaseConfigured = Object.values(firebaseConfig).every(
   (value) => value && value.trim() !== ''
 )
 
-let app: any
-let auth: any
+const app = isFirebaseConfigured
+  ? (getApps().length === 0 ? initializeApp(firebaseConfig) : getApp())
+  : null
 
-if (typeof window !== 'undefined') {
-  if (isFirebaseConfigured) {
-    app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp()
-    auth = getAuth(app)
-  } else {
-    console.error('Firebase configuration is incomplete. Real OTP verification will fail.')
-    auth = null
-  }
-} else {
-  auth = null
-}
+const auth = app ? getAuth(app) : null
 
 export { app, auth, isFirebaseConfigured }

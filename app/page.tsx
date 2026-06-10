@@ -861,20 +861,27 @@ export default function KrishiDam() {
       throw new Error('Firebase Auth not initialized')
     }
 
+    // Clear previous verifier if any to avoid rendering clashes
     if ((window as any).recaptchaVerifier) {
-      return (window as any).recaptchaVerifier
+      try {
+        (window as any).recaptchaVerifier.clear()
+      } catch (e) {
+        console.error('Error clearing old recaptcha verifier:', e)
+      }
+      (window as any).recaptchaVerifier = null
     }
 
-    // Ensure DOM container exists
-    let container = document.getElementById('recaptcha-container')
-    if (!container) {
-      container = document.createElement('div')
-      container.id = 'recaptcha-container'
-      document.body.appendChild(container)
+    // Recreate fresh DOM container for reCAPTCHA widget
+    const oldContainer = document.getElementById('recaptcha-container')
+    if (oldContainer) {
+      oldContainer.remove()
     }
 
-    let verifier: any
-    verifier = new (RecaptchaVerifier as any)(auth, 'recaptcha-container', {
+    const container = document.createElement('div')
+    container.id = 'recaptcha-container'
+    document.body.appendChild(container)
+
+    const verifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
       size: 'invisible',
       callback: () => {
         // reCAPTCHA solved
