@@ -585,14 +585,16 @@ export default function KrishiDam() {
   const fetchMarketPrices = useCallback(async () => {
     try {
       const res = await fetch('/api/market?action=latest-prices')
+      if (!res.ok) return
       const data = await res.json()
-      setMarketPrices(data)
+      if (Array.isArray(data)) setMarketPrices(data)
     } catch { /* silently fail */ }
   }, [])
 
   const fetchMarketStats = useCallback(async () => {
     try {
       const res = await fetch('/api/market?action=stats')
+      if (!res.ok) return
       const data = await res.json()
       setMarketStats(data)
     } catch { /* silently fail */ }
@@ -601,32 +603,36 @@ export default function KrishiDam() {
   const fetchRecentTransactions = useCallback(async () => {
     try {
       const res = await fetch('/api/market?action=recent-transactions')
+      if (!res.ok) return
       const data = await res.json()
-      setRecentTransactions(data)
+      if (Array.isArray(data)) setRecentTransactions(data)
     } catch { /* silently fail */ }
   }, [])
 
   const fetchMillInventories = useCallback(async () => {
     try {
       const res = await fetch('/api/market?action=inventories')
+      if (!res.ok) return
       const data = await res.json()
-      setMillInventories(data)
+      if (Array.isArray(data)) setMillInventories(data)
     } catch { /* silently fail */ }
   }, [])
 
   const fetchAdminDisputes = useCallback(async () => {
     try {
       const res = await fetch('/api/admin?action=disputes')
+      if (!res.ok) return
       const data = await res.json()
-      setAdminDisputes(data)
+      if (Array.isArray(data)) setAdminDisputes(data)
     } catch { /* silently fail */ }
   }, [])
 
   const fetchPlatformSettings = useCallback(async () => {
     try {
       const res = await fetch('/api/admin?action=settings')
+      if (!res.ok) return
       const data = await res.json()
-      setPlatformSettings(data)
+      if (Array.isArray(data)) setPlatformSettings(data)
     } catch { /* silently fail */ }
   }, [])
 
