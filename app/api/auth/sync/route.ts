@@ -61,7 +61,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ exists: false })
       }
       
-      // Create user
+      // Step 1: Create the user first
       user = await prisma.user.create({
         data: {
           phone: cleanPhone,
@@ -71,26 +71,38 @@ export async function POST(request: Request) {
           upazila: upazila || 'Tejgaon',
           verified: true,
           trustScore: 100,
-          ...(role.toLowerCase() === 'farmer' && {
-            farmerProfile: {
-              create: {
-                nidNumber: null,
-                landType: 'own',
-                primaryCrops: ['boro'],
-                bkashNumber: cleanPhone
-              }
-            }
-          }),
-          ...(role.toLowerCase() === 'mill' && {
-            millProfile: {
-              create: {
-                millName: millName || 'Registered Mill',
-                publicVisible: true,
-                buyingPreferences: { crop_types: ['boro'], grades: ['A'], districts: ['Dhaka'] }
-              }
-            }
-          })
         },
+        include: {
+          farmerProfile: true,
+          millProfile: true
+        }
+      })
+
+      // Step 2: Create the profile with the same ID as the user (shared 1:1 relation)
+      if (role.toLowerCase() === 'farmer') {
+        await prisma.farmerProfile.create({
+          data: {
+            id: user.id,
+            nidNumber: null,
+            landType: 'own',
+            primaryCrops: ['boro'],
+            bkashNumber: cleanPhone
+          }
+        })
+      } else if (role.toLowerCase() === 'mill') {
+        await prisma.millProfile.create({
+          data: {
+            id: user.id,
+            millName: millName || 'Registered Mill',
+            publicVisible: true,
+            buyingPreferences: { crop_types: ['boro'], grades: ['A'], districts: ['Dhaka'] }
+          }
+        })
+      }
+
+      // Step 3: Fetch the user again with the profile included
+      user = await prisma.user.findUnique({
+        where: { id: user.id },
         include: {
           farmerProfile: true,
           millProfile: true
@@ -99,17 +111,17 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({
-      id: user.id,
-      name: user.name,
-      phone: user.phone,
-      role: user.role.toUpperCase(),
-      profileId: user.id,
-      verified: user.verified,
-      trustScore: user.trustScore,
-      district: user.district,
-      upazila: user.upazila,
-      farmerProfile: user.farmerProfile,
-      millProfile: user.millProfile
+      id: user!.id,
+      name: user!.name,
+      phone: user!.phone,
+      role: user!.role.toUpperCase(),
+      profileId: user!.id,
+      verified: user!.verified,
+      trustScore: user!.trustScore,
+      district: user!.district,
+      upazila: user!.upazila,
+      farmerProfile: user!.farmerProfile,
+      millProfile: user!.millProfile
     })
   } catch (err: any) {
     console.error('Error syncing user:', err)

@@ -11,7 +11,7 @@ import {
   Sun, Moon, Languages, Phone, LogOut, Lock, MessageSquare, Trash2,
   Settings, CreditCard, Tag, DollarSign, PieChart
 } from 'lucide-react'
-import { auth } from '@/lib/firebase'
+import { auth, isFirebaseConfigured } from '@/lib/firebase'
 import { RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult } from 'firebase/auth'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from 'recharts'
 
@@ -845,6 +845,10 @@ export default function KrishiDam() {
 
   // Helper to initialize reCAPTCHA verifier
   const getRecaptchaVerifier = () => {
+    if (!auth) {
+      throw new Error('Firebase Auth not initialized')
+    }
+
     // Dispose of any existing verifier instance
     if ((window as any).recaptchaVerifier) {
       try {
@@ -886,6 +890,16 @@ export default function KrishiDam() {
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!authForm.phone) return
+
+    if (!isFirebaseConfigured || !auth) {
+      setAuthForm(prev => ({
+        ...prev,
+        error: lang === 'BN'
+          ? 'OTP সার্ভিস কনফিগার করা হয়নি। অনুগ্রহ করে অ্যাডমিনের সাথে যোগাযোগ করুন।'
+          : 'OTP service is not configured. Please contact the administrator.'
+      }))
+      return
+    }
 
     setAuthForm(prev => ({ ...prev, loading: true, error: '' }))
     try {
@@ -3149,6 +3163,17 @@ export default function KrishiDam() {
                 <XCircle className="w-5.5 h-5.5" />
               </button>
             </div>
+
+            {!isFirebaseConfigured && (
+              <div className="bg-error/10 border border-error/30 rounded-custom p-3 flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-error flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-error font-semibold">
+                  {lang === 'BN'
+                    ? 'OTP সার্ভিস কনফিগার করা হয়নি। অনুগ্রহ করে অ্যাডমিনের সাথে যোগাযোগ করুন।'
+                    : 'OTP service is not configured. Please contact the administrator.'}
+                </p>
+              </div>
+            )}
 
             {authForm.step === 'phone' && (
               <form onSubmit={handleSendOtp} className="flex flex-col gap-4">
