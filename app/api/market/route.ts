@@ -160,7 +160,55 @@ export async function GET(request: Request) {
         trustScore: m.user.trustScore,
         yellowCards: m.user.cardsAsMill.filter(c => c.cardType === 'yellow' && !c.overridden).length,
         redCards: m.user.cardsAsMill.filter(c => c.cardType === 'red' && !c.overridden).length,
+        greenCards: m.user.cardsAsMill.filter(c => c.cardType === 'green' && !c.overridden).length,
         suspended: m.suspended
+      })))
+    }
+
+    // 7. Mill transaction history
+    if (action === 'mill-transactions') {
+      const millId = searchParams.get('millId')
+      if (!millId) {
+        return NextResponse.json({ error: 'Mill ID required' }, { status: 400 })
+      }
+
+      const transactions = await prisma.transaction.findMany({
+        where: { millId },
+        include: {
+          farmer: {
+            select: {
+              name: true,
+              district: true,
+              phone: true
+            }
+          },
+          listing: {
+            select: {
+              variety: true,
+              quantityKg: true,
+              cropType: true
+            }
+          }
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 50
+      })
+
+      return NextResponse.json(transactions.map(t => ({
+        id: t.id,
+        farmerName: t.farmer.name,
+        farmerDistrict: t.farmer.district,
+        variety: t.listing.variety,
+        cropType: t.listing.cropType,
+        quantityKg: t.quantityKg,
+        quantityMaund: t.quantityKg / 40,
+        agreedPrice: Number(t.agreedPrice),
+        totalAmount: Number(t.totalAmount),
+        finalPrice: Number(t.finalPrice),
+        paymentStatus: t.paymentStatus,
+        deliveryStatus: t.deliveryStatus,
+        priceRevised: t.priceRevised,
+        createdAt: t.createdAt.toISOString()
       })))
     }
 

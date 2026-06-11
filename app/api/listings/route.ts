@@ -55,6 +55,7 @@ export async function GET(request: Request) {
                 phone: true,
                 trustScore: true,
                 millProfile: true,
+                cardsAsMill: true,
               },
             },
             messages: {
@@ -71,33 +72,43 @@ export async function GET(request: Request) {
     // Map new Postgres structure to UI virtual fields for backward compatibility
     const mappedListings = listings.map(l => {
       // Map contactRequests to bids
-      const mappedBids = l.contactRequests.map(cr => ({
-        id: cr.id,
-        listingId: cr.listingId,
-        pricePerMaund: Number(cr.offeredPrice),
-        totalPrice: Number(cr.offeredPrice) * (l.quantityKg / 40),
-        notes: cr.message,
-        transportIncluded: (cr.mill.millProfile as any)?.buyingPreferences?.transport_included || false,
-        transportCost: null,
-        status: cr.status.toUpperCase(),
-        createdAt: cr.createdAt.toISOString(),
-        mill: {
-          id: cr.mill.id,
-          millName: (cr.mill.millProfile as any)?.millName || cr.mill.name || 'Mill Owner',
-          rating: (cr.mill.millProfile as any)?.rating || (cr.mill.trustScore / 20) || 5.0,
-          totalDeals: (cr.mill.millProfile as any)?.totalDeals || 0,
-          yellowCards: 0,
-          user: { name: cr.mill.name, nameBn: null }
-        },
-        messages: cr.messages.map(msg => ({
-          id: msg.id,
-          senderId: msg.senderId,
-          senderRole: msg.senderRole,
-          message: msg.message,
-          priceOffered: msg.priceOffered ? Number(msg.priceOffered) : null,
-          createdAt: msg.createdAt.toISOString()
-        }))
-      }))
+      const mappedBids = l.contactRequests.map(cr => {
+        const cards = cr.mill.cardsAsMill || []
+        const greenCards = cards.filter((c: any) => c.cardType === 'green' && !c.overridden).length
+        const yellowCards = cards.filter((c: any) => c.cardType === 'yellow' && !c.overridden).length
+        const redCards = cards.filter((c: any) => c.cardType === 'red' && !c.overridden).length
+        
+        return {
+          id: cr.id,
+          listingId: cr.listingId,
+          pricePerMaund: Number(cr.offeredPrice),
+          totalPrice: Number(cr.offeredPrice) * (l.quantityKg / 40),
+          notes: cr.message,
+          transportIncluded: (cr.mill.millProfile as any)?.buyingPreferences?.transport_included || false,
+          transportCost: null,
+          status: cr.status.toUpperCase(),
+          createdAt: cr.createdAt.toISOString(),
+          mill: {
+            id: cr.mill.id,
+            millName: (cr.mill.millProfile as any)?.millName || cr.mill.name || 'Mill Owner',
+            rating: (cr.mill.millProfile as any)?.rating || (cr.mill.trustScore / 20) || 5.0,
+            totalDeals: (cr.mill.millProfile as any)?.totalDeals || 0,
+            trustScore: cr.mill.trustScore,
+            greenCards,
+            yellowCards,
+            redCards,
+            user: { name: cr.mill.name, nameBn: null }
+          },
+          messages: cr.messages.map(msg => ({
+            id: msg.id,
+            senderId: msg.senderId,
+            senderRole: msg.senderRole,
+            message: msg.message,
+            priceOffered: msg.priceOffered ? Number(msg.priceOffered) : null,
+            createdAt: msg.createdAt.toISOString()
+          }))
+        }
+      })
 
       return {
         id: l.id,

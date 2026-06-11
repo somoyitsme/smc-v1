@@ -543,6 +543,10 @@ export default function KrishiDam() {
   const [aiLoading, setAiLoading] = useState(false)
   const [showNewComplaintModal, setShowNewComplaintModal] = useState(false)
   const [complaintForm, setComplaintForm] = useState({ title: '', description: '', targetUserId: '', transactionId: '', listingId: '', district: '', upazila: '' })
+  const [showMillHistoryModal, setShowMillHistoryModal] = useState(false)
+  const [selectedMillForHistory, setSelectedMillForHistory] = useState<any | null>(null)
+  const [millTransactionHistory, setMillTransactionHistory] = useState<any[]>([])
+  const [millHistoryLoading, setMillHistoryLoading] = useState(false)
 
   // Hash Router States
   const [currentHash, setCurrentHash] = useState('#/')
@@ -848,6 +852,29 @@ export default function KrishiDam() {
       }
     } catch {
       addToast('error', 'Network error updating complaint')
+    }
+  }
+
+  const handleViewMillHistory = async (millId: string, millName: string) => {
+    setMillHistoryLoading(true)
+    setSelectedMillForHistory({ id: millId, name: millName })
+    setShowMillHistoryModal(true)
+    
+    try {
+      const res = await fetch(`/api/market?action=mill-transactions&millId=${millId}`)
+      if (res.ok) {
+        const data = await res.json()
+        setMillTransactionHistory(data)
+      } else {
+        addToast('error', lang === 'BN' ? 'মিলের লেনদেন ইতিহাস লোড করতে ব্যর্থ' : 'Failed to load mill transaction history')
+        setMillTransactionHistory([])
+      }
+    } catch (err) {
+      console.error('Error fetching mill history:', err)
+      addToast('error', lang === 'BN' ? 'মিলের লেনদেন ইতিহাস লোড করতে ব্যর্থ' : 'Failed to load mill transaction history')
+      setMillTransactionHistory([])
+    } finally {
+      setMillHistoryLoading(false)
     }
   }
 
@@ -2088,21 +2115,77 @@ export default function KrishiDam() {
                       )}
                     </div>
 
-                    {/* Offers under listing */}
+                    {/* Offers under listing - sorted by mill reputation */}
                     {listing.bids && listing.bids.length > 0 ? (
                       <div className="flex flex-col gap-2">
-                        {listing.bids.map((bid) => (
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-xs font-bold text-text-secondary uppercase tracking-wider">
+                            {lang === 'BN' ? 'মিলের রেপুটেশন অনুযায়ী সাজানো:' : 'Sorted by Mill Reputation:'}
+                          </span>
+                          <span className="flex items-center gap-1 text-[10px]">
+                            <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-success/10 text-success border border-success/20">
+                              <Award className="w-2.5 h-2.5" /> {lang === 'BN' ? 'সবচেয়ে ভালো' : 'Best'}
+                            </span>
+                            <span className="text-text-secondary">→</span>
+                            <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-warning/10 text-warning border border-warning/20">
+                              <AlertTriangle className="w-2.5 h-2.5" /> {lang === 'BN' ? 'মাঝারি' : 'Medium'}
+                            </span>
+                            <span className="text-text-secondary">→</span>
+                            <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-danger/10 text-danger border border-danger/20">
+                              <Ban className="w-2.5 h-2.5" /> {lang === 'BN' ? 'ঝুঁকিপূর্ণ' : 'Risky'}
+                            </span>
+                          </span>
+                        </div>
+                        {[...listing.bids].sort((a, b) => {
+                          // Sort by reputation: green cards first, then yellow, then red
+                          // Higher green cards = better, higher red cards = worse
+                          const aScore = (a.mill.greenCards || 0) * 3 - (a.mill.yellowCards || 0) * 1 - (a.mill.redCards || 0) * 2
+                          const bScore = (b.mill.greenCards || 0) * 3 - (b.mill.yellowCards || 0) * 1 - (b.mill.redCards || 0) * 2
+                          return bScore - aScore // Higher score first
+                        }).map((bid) => (
                           <div key={bid.id} className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-custom border bg-background border-text-secondary/10">
                             <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-custom bg-brand-green/10 text-brand-green flex items-center justify-center font-bold text-sm">
-                                <Building2 className="w-5 h-5 text-brand-green" />
+                              <div className={`w-10 h-10 rounded-custom flex items-center justify-center font-bold text-sm ${
+                                (bid.mill.greenCards || 0) > 0 ? 'bg-success/10 text-success' :
+                                (bid.mill.redCards || 0) > 0 ? 'bg-danger/10 text-danger' :
+                                'bg-brand-green/10 text-brand-green'
+                              }`}>
+                                <Building2 className="w-5 h-5" />
                               </div>
                               <div>
-                                <div className="text-sm font-bold">{bid.mill.millName}</div>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => handleViewMillHistory(bid.mill.id, bid.mill.millName)}
+                                    className="text-sm font-bold hover:text-brand-green hover:underline cursor-pointer bg-transparent border-none p-0 text-left"
+                                    title={lang === 'BN' ? 'মিলের লেনদেন ইতিহাস দেখুন' : 'View mill transaction history'}
+                                  >
+                                    {bid.mill.millName}
+                                  </button>
+                                  {/* Card badges */}
+                                  <div className="flex items-center gap-1">
+                                    {(bid.mill.greenCards || 0) > 0 && (
+                                      <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-success/10 text-success text-[10px] font-bold border border-success/20">
+                                        <Award className="w-2.5 h-2.5" /> {bid.mill.greenCards}
+                                      </span>
+                                    )}
+                                    {(bid.mill.yellowCards || 0) > 0 && (
+                                      <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-warning/10 text-warning text-[10px] font-bold border border-warning/20">
+                                        <AlertTriangle className="w-2.5 h-2.5" /> {bid.mill.yellowCards}
+                                      </span>
+                                    )}
+                                    {(bid.mill.redCards || 0) > 0 && (
+                                      <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-danger/10 text-danger text-[10px] font-bold border border-danger/20">
+                                        <Ban className="w-2.5 h-2.5" /> {bid.mill.redCards}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
                                 <div className="flex items-center gap-2 mt-1 text-[11px] text-text-secondary font-bold">
                                   <span className="flex items-center gap-0.5"><Star className="w-3 h-3 text-warning fill-warning" /> {bid.mill.rating}</span>
                                   <span>·</span>
                                   <span>{bid.mill.totalDeals} {t.dealsCount}</span>
+                                  <span>·</span>
+                                  <span className="font-mono">Trust: {bid.mill.trustScore || bid.mill.rating * 20}%</span>
                                 </div>
                                 {bid.notes && <div className="text-[11px] text-text-secondary italic mt-1">&quot;{bid.notes}&quot;</div>}
                               </div>
@@ -2634,21 +2717,7 @@ export default function KrishiDam() {
                   <div className="flex flex-col gap-4">
                     {listings.filter(l => l.bids && l.bids.some(b => b.mill.id === authUser?.id)).slice(0, 3).map(l => {
                       const myBid = l.bids.find(b => b.mill.id === authUser?.id)!
-  // Show loading screen while restoring session
-  if (isRestoringSession) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-brand-green border-t-transparent rounded-full animate-spin" />
-          <p className="text-text-secondary text-sm font-semibold">
-            {lang === 'BN' ? 'সেশন পুনরুদ্ধার হচ্ছে...' : 'Restoring session...'}
-          </p>
-        </div>
-      </div>
-    )
-  }
-
-  return (
+                      return (
                         <div key={myBid.id} className="bg-surface border border-text-secondary/10 rounded-custom p-5 shadow-sm flex justify-between items-center flex-wrap gap-4">
                           <div>
                             <div className="font-bold text-sm text-text-primary">{l.variety} ({l.quantity} {t.maund})</div>
@@ -4562,6 +4631,97 @@ export default function KrishiDam() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Mill Transaction History Modal */}
+      {showMillHistoryModal && selectedMillForHistory && (
+        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-6" onClick={() => setShowMillHistoryModal(false)}>
+          <div className="bg-surface border border-text-secondary/15 rounded-custom shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col animate-scale-in" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center p-6 border-b border-text-secondary/15">
+              <h2 className="text-lg font-black flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-brand-green" />
+                {lang === 'BN' ? 'মিল লেনদেন ইতিহাস' : 'Mill Transaction History'}: {selectedMillForHistory.name}
+              </h2>
+              <button className="text-text-secondary/80 hover:text-text-primary bg-transparent border-none cursor-pointer" onClick={() => setShowMillHistoryModal(false)}>
+                <XCircle className="w-5.5 h-5.5" />
+              </button>
+            </div>
+            
+            <div className="overflow-y-auto flex-1 p-6">
+              {millHistoryLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="w-8 h-8 border-4 border-brand-green border-t-transparent rounded-full animate-spin" />
+                  <span className="ml-3 text-text-secondary">{lang === 'BN' ? 'লোড হচ্ছে...' : 'Loading...'}</span>
+                </div>
+              ) : millTransactionHistory.length === 0 ? (
+                <div className="text-center py-12">
+                  <Package className="w-12 h-12 text-text-secondary/35 mx-auto mb-4" />
+                  <p className="text-text-secondary">{lang === 'BN' ? 'কোনো লেনদেন ইতিহাস নেই' : 'No transaction history found'}</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-text-secondary/5 border-b border-text-secondary/10">
+                        <th className="p-3 text-xs font-bold text-text-secondary uppercase tracking-wider">{lang === 'BN' ? 'তারিখ' : 'Date'}</th>
+                        <th className="p-3 text-xs font-bold text-text-secondary uppercase tracking-wider">{lang === 'BN' ? 'কৃষক' : 'Farmer'}</th>
+                        <th className="p-3 text-xs font-bold text-text-secondary uppercase tracking-wider">{lang === 'BN' ? 'জেলা' : 'District'}</th>
+                        <th className="p-3 text-xs font-bold text-text-secondary uppercase tracking-wider">{lang === 'BN' ? 'ধানের জাত' : 'Variety'}</th>
+                        <th className="p-3 text-xs font-bold text-text-secondary uppercase tracking-wider">{lang === 'BN' ? 'পরিমাণ' : 'Quantity'}</th>
+                        <th className="p-3 text-xs font-bold text-text-secondary uppercase tracking-wider">{lang === 'BN' ? 'চূড়ান্ত মূল্য' : 'Final Price'}</th>
+                        <th className="p-3 text-xs font-bold text-text-secondary uppercase tracking-wider">{lang === 'BN' ? 'মোট মূল্য' : 'Total'}</th>
+                        <th className="p-3 text-xs font-bold text-text-secondary uppercase tracking-wider">{lang === 'BN' ? 'অবস্থা' : 'Status'}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {millTransactionHistory.map((tx) => (
+                        <tr key={tx.id} className="border-b border-text-secondary/5 hover:bg-text-secondary/5 transition-all">
+                          <td className="p-3 text-xs font-mono">{new Date(tx.createdAt).toLocaleDateString()}</td>
+                          <td className="p-3 text-sm font-bold">{tx.farmerName}</td>
+                          <td className="p-3 text-xs">{tx.farmerDistrict}</td>
+                          <td className="p-3 text-sm">{tx.variety}</td>
+                          <td className="p-3 text-xs font-mono">{tx.quantityMaund.toFixed(1)} {t.maund}</td>
+                          <td className="p-3 text-sm font-mono text-brand-green">{formatTaka(tx.finalPrice)}/{t.maund}</td>
+                          <td className="p-3 text-sm font-mono font-bold">{formatTaka(tx.totalAmount)}</td>
+                          <td className="p-3">
+                            <div className="flex flex-col gap-1">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                                tx.paymentStatus === 'completed' ? 'bg-success/10 text-success border-success/20' :
+                                tx.paymentStatus === 'partial' ? 'bg-warning/10 text-warning border-warning/20' :
+                                'bg-text-secondary/10 text-text-secondary border-text-secondary/20'
+                              }`}>
+                                {lang === 'BN' ? 'পেমেন্ট' : 'Payment'}: {tx.paymentStatus}
+                              </span>
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                                tx.deliveryStatus === 'delivered' ? 'bg-success/10 text-success border-success/20' :
+                                tx.deliveryStatus === 'in_transit' ? 'bg-info/10 text-info border-info/20' :
+                                'bg-text-secondary/10 text-text-secondary border-text-secondary/20'
+                              }`}>
+                                {lang === 'BN' ? 'ডেলিভারি' : 'Delivery'}: {tx.deliveryStatus}
+                              </span>
+                              {tx.priceRevised && (
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold border bg-warning/10 text-warning border-warning/20">
+                                  {lang === 'BN' ? 'মূল্য পরিবর্তিত' : 'Price Revised'}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+            
+            <div className="border-t border-text-secondary/15 p-4 bg-background/50">
+              <div className="flex items-center justify-between text-xs text-text-secondary">
+                <span>{lang === 'BN' ? 'মোট লেনদেন' : 'Total Transactions'}: {millTransactionHistory.length}</span>
+                <span>{lang === 'BN' ? 'শেষ ৫০টি লেনদেন দেখানো হচ্ছে' : 'Showing last 50 transactions'}</span>
+              </div>
+            </div>
           </div>
         </div>
       )}
