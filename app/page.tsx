@@ -1256,7 +1256,14 @@ export default function KrishiDam() {
   }
 
   const handleCreateListing = async () => {
-    if (!listingFormData.quantity || !aiPriceResult || !authUser) return
+    if (!listingFormData.quantity || !authUser) {
+      addToast('error', lang === 'BN' ? 'অনুগ্রহ করে সকল তথ্য পূরণ করুন' : 'Please fill in all required fields')
+      return
+    }
+    
+    // Use AI price if available, otherwise use a default floor price
+    const floorPrice = aiPriceResult?.floorPrice || 1200
+    
     try {
       const expiresAt = new Date()
       expiresAt.setDate(expiresAt.getDate() + parseInt(listingFormData.expiresIn))
@@ -1272,7 +1279,7 @@ export default function KrishiDam() {
           quantityKg: parseFloat(listingFormData.quantity) * 40,
           qualityGrade: listingFormData.qualityGrade,
           description: listingFormData.description,
-          aiFloorPrice: (aiPriceResult as { floorPrice: number }).floorPrice,
+          aiFloorPrice: floorPrice,
           askingPrice: listingFormData.askingPrice ? parseFloat(listingFormData.askingPrice) : null,
           district: listingFormData.district,
           upazila: listingFormData.upazila,
@@ -1283,6 +1290,7 @@ export default function KrishiDam() {
       if (res.ok) {
         addToast('success', lang === 'BN' ? 'ধানের লিস্টিং সফলভাবে তৈরি হয়েছে!' : 'Crop listing created successfully!')
         setShowNewListingModal(false)
+        window.location.hash = '#/farmer/listings'
         fetchListings()
       } else {
         const errorData = await res.json()
@@ -1291,9 +1299,6 @@ export default function KrishiDam() {
     } catch (err) {
       console.error('Error creating listing:', err)
       addToast('error', lang === 'BN' ? 'লিস্টিং তৈরি করতে ব্যর্থ হয়েছে' : 'Failed to create listing')
-    }
-    } catch {
-      addToast('error', lang === 'BN' ? 'লিস্টিং তৈরি করতে ব্যর্থ হয়েছে' : 'Failed to create listing')
     }
   }
 
@@ -1486,10 +1491,6 @@ export default function KrishiDam() {
       addToast('error', lang === 'BN' ? 'কার্ড দিতে ব্যর্থ হয়েছে' : 'Failed to issue card')
     }
   }
-    } catch {
-      addToast('error', lang === 'BN' ? 'কার্ড দিতে ব্যর্থ হয়েছে' : 'Failed to issue card')
-    }
-  }
 
   const formatTaka = (n: any) => {
     if (n === null || n === undefined || isNaN(Number(n))) return '৳০'
@@ -1538,12 +1539,17 @@ export default function KrishiDam() {
           </button>
 
           <div className="flex items-center gap-4">
-            <button className="flex items-center gap-2 text-sm font-medium hover:text-brand-green transition-all bg-transparent border-none cursor-pointer" onClick={() => window.location.hash = '#/market'}>
-              <TrendingUp className="w-4 h-4 text-brand-green" /> {t.market}
-            </button>
-            <button className="flex items-center gap-2 text-sm font-medium hover:text-brand-green transition-all bg-transparent border-none cursor-pointer" onClick={() => window.location.hash = '#/pricing'}>
-              <CreditCard className="w-4 h-4 text-brand-green" /> {lang === 'BN' ? 'মূল্য' : 'Pricing'}
-            </button>
+            {/* Show Market and Pricing only when NOT logged in */}
+            {!authUser && (
+              <>
+                <button className="flex items-center gap-2 text-sm font-medium hover:text-brand-green transition-all bg-transparent border-none cursor-pointer" onClick={() => window.location.hash = '#/market'}>
+                  <TrendingUp className="w-4 h-4 text-brand-green" /> {t.market}
+                </button>
+                <button className="flex items-center gap-2 text-sm font-medium hover:text-brand-green transition-all bg-transparent border-none cursor-pointer" onClick={() => window.location.hash = '#/pricing'}>
+                  <CreditCard className="w-4 h-4 text-brand-green" /> {lang === 'BN' ? 'মূল্য' : 'Pricing'}
+                </button>
+              </>
+            )}
 
             {/* Language Controls */}
             <div className="flex items-center gap-1 border-l border-text-secondary/20 pl-4">
