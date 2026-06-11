@@ -502,6 +502,7 @@ export default function KrishiDam() {
   const [authUser, setAuthUser] = useState<any | null>(null)
   const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null)
   const [firebaseIdToken, setFirebaseIdToken] = useState<string>('')
+  const [isRestoringSession, setIsRestoringSession] = useState(true)
   const [authForm, setAuthForm] = useState({
     phone: '',
     otp: '',
@@ -562,19 +563,19 @@ export default function KrishiDam() {
 
   // Firebase Auth State Listener - Restore session on page refresh
   useEffect(() => {
-    if (!isFirebaseConfigured || !auth) return
-
-    let isRestoring = false
+    if (!isFirebaseConfigured || !auth) {
+      setIsRestoringSession(false)
+      return
+    }
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser && !isRestoring && !authUser) {
-        isRestoring = true
+      if (firebaseUser) {
         try {
           const token = await firebaseUser.getIdToken()
           const phone = firebaseUser.phoneNumber
 
           if (!phone) {
-            isRestoring = false
+            setIsRestoringSession(false)
             return
           }
 
@@ -601,13 +602,16 @@ export default function KrishiDam() {
         } catch (err) {
           console.error('Error restoring auth session:', err)
         } finally {
-          isRestoring = false
+          setIsRestoringSession(false)
         }
+      } else {
+        // No Firebase user - not logged in
+        setIsRestoringSession(false)
       }
     })
 
     return () => unsubscribe()
-  }, [authUser])
+  }, [])
 
   const addToast = useCallback((type: Toast['type'], message: string) => {
     const id = Date.now().toString()
@@ -931,6 +935,9 @@ export default function KrishiDam() {
   // Setup Hash Route Listener and Protection
   useEffect(() => {
     const handleHashChange = () => {
+      // Don't redirect if we're still restoring the session
+      if (isRestoringSession) return
+
       const hash = window.location.hash || '#/'
       
       // Route protection checks
@@ -942,7 +949,7 @@ export default function KrishiDam() {
           return
         }
         if (authUser.role !== 'FARMER') {
-          addToast('error', lang === 'BN' ? 'আপনার অ্যাকাউন্টটি কৃষক অ্যাকাউন্ট নয়।' : 'Your account is not a Farmer account.')
+          addToast('error', lang === 'BN' ? 'আপনার অ্যাকাউন্টটি কৃষক অ্যাকাউন্ট নয়।' : 'Your account is not a Farmer account.')
           window.location.hash = authUser.role === 'MILL' ? '#/mill' : '#/admin'
           return
         }
@@ -955,7 +962,7 @@ export default function KrishiDam() {
           return
         }
         if (authUser.role !== 'MILL') {
-          addToast('error', lang === 'BN' ? 'আপনার অ্যাকাউন্টটি চালকল অ্যাকাউন্ট নয়।' : 'Your account is not a Mill account.')
+          addToast('error', lang === 'BN' ? 'আপনার অ্যাকাউন্টটি চালকল অ্যাকাউন্ট নয়।' : 'Your account is not a Mill account.')
           window.location.hash = authUser.role === 'FARMER' ? '#/farmer' : '#/admin'
           return
         }
@@ -968,7 +975,7 @@ export default function KrishiDam() {
           return
         }
         if (authUser.role !== 'ADMIN') {
-          addToast('error', lang === 'BN' ? 'আপনার অ্যাকাউন্টটি অ্যাডমিন অ্যাকাউন্ট নয়।' : 'Your account is not an Admin account.')
+          addToast('error', lang === 'BN' ? 'আপনার অ্যাকাউন্টটি অ্যাডমিন অ্যাকাউন্ট নয়।' : 'Your account is not an Admin account.')
           window.location.hash = authUser.role === 'FARMER' ? '#/farmer' : '#/mill'
           return
         }
@@ -987,7 +994,7 @@ export default function KrishiDam() {
     window.addEventListener('hashchange', handleHashChange)
     handleHashChange()
     return () => window.removeEventListener('hashchange', handleHashChange)
-  }, [authUser, lang, addToast])
+  }, [authUser, lang, addToast, isRestoringSession])
 
   useEffect(() => {
     if (role === 'FARMER' || role === 'MILL') {
@@ -1274,6 +1281,9 @@ export default function KrishiDam() {
   }
 
   const handleLogout = async () => {
+    // Set restoring to false to prevent loading screen after logout
+    setIsRestoringSession(false)
+
     // Sign out from Firebase
     if (isFirebaseConfigured && auth) {
       try {
@@ -1592,6 +1602,20 @@ export default function KrishiDam() {
   const daysLeft = (date: string) => {
     const diff = new Date(date).getTime() - Date.now()
     return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)))
+  }
+
+  // Show loading screen while restoring session
+  if (isRestoringSession) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-brand-green border-t-transparent rounded-full animate-spin" />
+          <p className="text-text-secondary text-sm font-semibold">
+            {lang === 'BN' ? 'সেশন পুনরুদ্ধার হচ্ছে...' : 'Restoring session...'}
+          </p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -2610,7 +2634,21 @@ export default function KrishiDam() {
                   <div className="flex flex-col gap-4">
                     {listings.filter(l => l.bids && l.bids.some(b => b.mill.id === authUser?.id)).slice(0, 3).map(l => {
                       const myBid = l.bids.find(b => b.mill.id === authUser?.id)!
-                      return (
+  // Show loading screen while restoring session
+  if (isRestoringSession) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-brand-green border-t-transparent rounded-full animate-spin" />
+          <p className="text-text-secondary text-sm font-semibold">
+            {lang === 'BN' ? 'সেশন পুনরুদ্ধার হচ্ছে...' : 'Restoring session...'}
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
                         <div key={myBid.id} className="bg-surface border border-text-secondary/10 rounded-custom p-5 shadow-sm flex justify-between items-center flex-wrap gap-4">
                           <div>
                             <div className="font-bold text-sm text-text-primary">{l.variety} ({l.quantity} {t.maund})</div>
