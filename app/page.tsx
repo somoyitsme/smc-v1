@@ -63,7 +63,10 @@ interface Bid {
     millName: string
     rating: number
     totalDeals: number
-    yellowCards: number
+    greenCards?: number
+    yellowCards?: number
+    redCards?: number
+    trustScore?: number
     user: { name: string; nameBn: string | null }
   }
   messages: {
