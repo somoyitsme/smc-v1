@@ -1608,6 +1608,11 @@ export default function KrishiDam() {
                     {t.enterMill}
                   </button>
                 )}
+                {!authUser && (
+                  <button className="bg-surface hover:bg-text-secondary/10 border border-text-secondary/15 text-text-primary font-black text-sm rounded-custom px-6 py-3 cursor-pointer" onClick={() => { setAuthTargetRole('ADMIN'); setShowAuthModal(true); }}>
+                    {t.enterAdmin}
+                  </button>
+                )}
                 {authUser?.role === 'ADMIN' && (
                   <button className="bg-surface hover:bg-text-secondary/10 border border-text-secondary/15 text-text-primary font-black text-sm rounded-custom px-6 py-3 cursor-pointer" onClick={() => window.location.hash = '#/admin'}>
                     {lang === 'BN' ? 'এডমিন ড্যাশবোর্ড' : 'Admin Dashboard'}
