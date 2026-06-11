@@ -79,7 +79,7 @@ export async function GET(request: Request) {
         notes: cr.message,
         transportIncluded: (cr.mill.millProfile as any)?.buyingPreferences?.transport_included || false,
         transportCost: null,
-        status: cr.status,
+        status: cr.status.toUpperCase(),
         createdAt: cr.createdAt.toISOString(),
         mill: {
           id: cr.mill.id,

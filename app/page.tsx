@@ -494,6 +494,7 @@ export default function KrishiDam() {
     harvestDate: '', expiresIn: '7',
   })
   const [aiPriceResult, setAiPriceResult] = useState<Record<string, any> | null>(null)
+  const [acceptingBidId, setAcceptingBidId] = useState<string | null>(null)
 
   // Auth States
   const [showAuthModal, setShowAuthModal] = useState(false)
@@ -1103,7 +1104,8 @@ export default function KrishiDam() {
         })
       })
       if (!syncRes.ok) {
-        throw new Error('User synchronization failed')
+        const errorData = await syncRes.json()
+        throw new Error(errorData.error || 'User synchronization failed')
       }
       const syncData = await syncRes.json()
       
@@ -1175,7 +1177,8 @@ export default function KrishiDam() {
         })
       })
       if (!syncRes.ok) {
-        throw new Error('Registration failed')
+        const errorData = await syncRes.json()
+        throw new Error(errorData.error || 'Registration failed')
       }
       const newUser = await syncRes.json()
       setAuthUser(newUser)
@@ -1266,7 +1269,7 @@ export default function KrishiDam() {
           userId: authUser.id,
           variety: listingFormData.variety,
           season: listingFormData.season,
-          quantityKg: parseFloat(listingFormData.quantity) * 40, // Convert Maunds to KG
+          quantityKg: parseFloat(listingFormData.quantity) * 40,
           qualityGrade: listingFormData.qualityGrade,
           description: listingFormData.description,
           aiFloorPrice: (aiPriceResult as { floorPrice: number }).floorPrice,
@@ -1278,17 +1281,25 @@ export default function KrishiDam() {
         }),
       })
       if (res.ok) {
-        addToast('success', lang === 'BN' ? 'ধানের লিস্টিং সফলভাবে তৈরি হয়েছে!' : 'Crop listing created successfully!')
+        addToast('success', lang === 'BN' ? 'ধানের লিস্টিং সফলভাবে তৈরি হয়েছে!' : 'Crop listing created successfully!')
         setShowNewListingModal(false)
         fetchListings()
+      } else {
+        const errorData = await res.json()
+        addToast('error', errorData.error || (lang === 'BN' ? 'লিস্টিং তৈরি করতে ব্যর্থ হয়েছে' : 'Failed to create listing'))
       }
+    } catch (err) {
+      console.error('Error creating listing:', err)
+      addToast('error', lang === 'BN' ? 'লিস্টিং তৈরি করতে ব্যর্থ হয়েছে' : 'Failed to create listing')
+    }
     } catch {
       addToast('error', lang === 'BN' ? 'লিস্টিং তৈরি করতে ব্যর্থ হয়েছে' : 'Failed to create listing')
     }
   }
 
   const handleAcceptBid = async (bidId: string) => {
-    if (!authUser) return
+    if (!authUser || acceptingBidId) return
+    setAcceptingBidId(bidId)
     try {
       const res = await fetch('/api/bids', {
         method: 'PATCH',
@@ -1296,12 +1307,18 @@ export default function KrishiDam() {
         body: JSON.stringify({ bidId, action: 'ACCEPTED', userId: authUser.id }),
       })
       if (res.ok) {
-        addToast('success', lang === 'BN' ? 'দরপ্রস্তাব গৃহীত হয়েছে! লেনদেন তৈরি করা হয়েছে।' : 'Bid accepted! Transaction created.')
+        addToast('success', lang === 'BN' ? 'দরপ্রস্তাব গৃহীত হয়েছে! লেনদেন তৈরি করা হয়েছে।' : 'Bid accepted! Transaction created.')
         setShowNegotiationDrawer(false)
         fetchListings()
+      } else {
+        const errorData = await res.json()
+        addToast('error', errorData.error || (lang === 'BN' ? 'দরপ্রস্তাব গ্রহণ করতে ব্যর্থ হয়েছে' : 'Failed to accept bid'))
       }
-    } catch {
-      addToast('error', lang === 'BN' ? 'দরপ্রস্তাব গ্রহণ করতে ব্যর্থ হয়েছে' : 'Failed to accept bid')
+    } catch (err) {
+      console.error('Error accepting bid:', err)
+      addToast('error', lang === 'BN' ? 'দরপ্রস্তাব গ্রহণ করতে ব্যর্থ হয়েছে' : 'Failed to accept bid')
+    } finally {
+      setAcceptingBidId(null)
     }
   }
 
@@ -1342,8 +1359,12 @@ export default function KrishiDam() {
         })
 
         fetchListings()
+      } else {
+        const errorData = await res.json()
+        addToast('error', errorData.error || (lang === 'BN' ? 'বার্তা পাঠাতে ব্যর্থ হয়েছে' : 'Failed to send message'))
       }
-    } catch {
+    } catch (err) {
+      console.error('Error sending message:', err)
       addToast('error', lang === 'BN' ? 'বার্তা পাঠাতে ব্যর্থ হয়েছে' : 'Failed to send message')
     }
   }
@@ -1371,8 +1392,12 @@ export default function KrishiDam() {
         setShowInventoryModal(false)
         setInventoryFormData({ riceType: 'Miniket Raw', category: 'fine', quantityKg: '2000', pricePerKg: '65', notes: '' })
         fetchMillInventories()
+      } else {
+        const errorData = await res.json()
+        addToast('error', errorData.error || (lang === 'BN' ? 'স্টক তৈরি করতে ব্যর্থ হয়েছে' : 'Failed to create stock'))
       }
-    } catch {
+    } catch (err) {
+      console.error('Error creating inventory:', err)
       addToast('error', lang === 'BN' ? 'স্টক তৈরি করতে ব্যর্থ হয়েছে' : 'Failed to create stock')
     }
   }
@@ -1387,8 +1412,12 @@ export default function KrishiDam() {
       if (res.ok) {
         addToast('warning', lang === 'BN' ? 'স্টকটি মুছে ফেলা হয়েছে' : 'Stock deleted')
         fetchMillInventories()
+      } else {
+        const errorData = await res.json()
+        addToast('error', errorData.error || (lang === 'BN' ? 'মুছে ফেলতে ব্যর্থ হয়েছে' : 'Failed to delete'))
       }
-    } catch {
+    } catch (err) {
+      console.error('Error deleting inventory:', err)
       addToast('error', lang === 'BN' ? 'মুছে ফেলতে ব্যর্থ হয়েছে' : 'Failed to delete')
     }
   }
@@ -1410,13 +1439,20 @@ export default function KrishiDam() {
         })
       })
       if (res.ok) {
-        addToast('success', lang === 'BN' ? 'বিরোধ নিষ্পত্তি সফল হয়েছে' : 'Dispute resolved successfully')
+        addToast('success', lang === 'BN' ? 'বিরোধ নিষ্পত্তি সফল হয়েছে' : 'Dispute resolved successfully')
         setShowDisputeModal(false)
         setAdminRulingText('')
         setAdminRulingPrice('')
         fetchAdminDisputes()
         fetchAdminData()
+      } else {
+        const errorData = await res.json()
+        addToast('error', errorData.error || (lang === 'BN' ? 'নিষ্পত্তি করতে ব্যর্থ হয়েছে' : 'Failed to resolve dispute'))
       }
+    } catch (err) {
+      console.error('Error resolving dispute:', err)
+      addToast('error', lang === 'BN' ? 'নিষ্পত্তি করতে ব্যর্থ হয়েছে' : 'Failed to resolve dispute')
+    }
     } catch {
       addToast('error', lang === 'BN' ? 'নিষ্পত্তি করতে ব্যর্থ হয়েছে' : 'Failed to resolve dispute')
     }
@@ -1437,11 +1473,19 @@ export default function KrishiDam() {
       })
       if (res.ok) {
         addToast('warning', lang === 'BN'
-          ? `${cardTarget.name}-কে ${type === 'YELLOW_CARD' ? 'হলুদ কার্ড' : 'লাল কার্ড'} দেওয়া হয়েছে`
+          ? `${cardTarget.name}-কে ${type === 'YELLOW_CARD' ? 'হলুদ কার্ড' : 'লাল কার্ড'} দেওয়া হয়েছে`
           : `${type === 'YELLOW_CARD' ? 'Yellow' : 'Red'} card issued to ${cardTarget.name}`)
         setShowCardModal(false)
         fetchAdminData()
+      } else {
+        const errorData = await res.json()
+        addToast('error', errorData.error || (lang === 'BN' ? 'কার্ড দিতে ব্যর্থ হয়েছে' : 'Failed to issue card'))
       }
+    } catch (err) {
+      console.error('Error issuing card:', err)
+      addToast('error', lang === 'BN' ? 'কার্ড দিতে ব্যর্থ হয়েছে' : 'Failed to issue card')
+    }
+  }
     } catch {
       addToast('error', lang === 'BN' ? 'কার্ড দিতে ব্যর্থ হয়েছে' : 'Failed to issue card')
     }
@@ -1951,10 +1995,11 @@ export default function KrishiDam() {
                                   <MessageSquare className="w-3.5 h-3.5" /> {t.negotiateBtn}
                                 </button>
                                 <button 
-                                  className="bg-brand-green hover:bg-brand-dark text-background font-bold text-xs rounded-custom px-3.5 py-2 transition-all flex items-center gap-1 cursor-pointer border-none"
+                                  className="bg-brand-green hover:bg-brand-dark text-background font-bold text-xs rounded-custom px-3.5 py-2 transition-all flex items-center gap-1 cursor-pointer border-none disabled:opacity-50 disabled:cursor-not-allowed"
                                   onClick={() => handleAcceptBid(bid.id)}
+                                  disabled={acceptingBidId === bid.id}
                                 >
-                                  <CheckCircle2 className="w-3.5 h-3.5 text-background" /> {t.actionAccept}
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-background" /> {acceptingBidId === bid.id ? (lang === 'BN' ? 'গ্রহণ করা হচ্ছে...' : 'Accepting...') : t.actionAccept}
                                 </button>
                               </div>
                             </div>
@@ -2013,10 +2058,11 @@ export default function KrishiDam() {
                           <MessageSquare className="w-3.5 h-3.5" /> {t.negotiateBtn}
                         </button>
                         <button 
-                          className="bg-brand-green hover:bg-brand-dark text-background font-bold text-xs rounded-custom px-3.5 py-2 transition-all flex items-center gap-1 cursor-pointer border-none"
+                          className="bg-brand-green hover:bg-brand-dark text-background font-bold text-xs rounded-custom px-3.5 py-2 transition-all flex items-center gap-1 cursor-pointer border-none disabled:opacity-50 disabled:cursor-not-allowed"
                           onClick={() => handleAcceptBid(bid.id)}
+                          disabled={acceptingBidId === bid.id}
                         >
-                          <CheckCircle2 className="w-3.5 h-3.5 text-background" /> {t.actionAccept}
+                          <CheckCircle2 className="w-3.5 h-3.5 text-background" /> {acceptingBidId === bid.id ? (lang === 'BN' ? 'গ্রহণ করা হচ্ছে...' : 'Accepting...') : t.actionAccept}
                         </button>
                       </div>
                     </div>
@@ -4153,9 +4199,10 @@ export default function KrishiDam() {
               {role === 'FARMER' && selectedBid.status === 'PENDING' && (
                 <button 
                   onClick={() => handleAcceptBid(selectedBid.id)}
-                  className="w-full mt-2 py-2 bg-brand-green text-background hover:bg-brand-dark text-xs font-bold rounded-custom border-none cursor-pointer flex items-center justify-center gap-1.5 shadow-md"
+                  disabled={acceptingBidId === selectedBid.id}
+                  className="w-full mt-2 py-2 bg-brand-green text-background hover:bg-brand-dark text-xs font-bold rounded-custom border-none cursor-pointer flex items-center justify-center gap-1.5 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <CheckCircle2 className="w-4 h-4 text-background" /> {t.actionAccept}
+                  <CheckCircle2 className="w-4 h-4 text-background" /> {acceptingBidId === selectedBid.id ? (lang === 'BN' ? 'গ্রহণ করা হচ্ছে...' : 'Accepting...') : t.actionAccept}
                 </button>
               )}
             </div>

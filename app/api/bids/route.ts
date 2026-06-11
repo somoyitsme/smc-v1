@@ -266,35 +266,34 @@ export async function PATCH(request: Request) {
       const listing = contactRequest.listing
       const totalPrice = Number(contactRequest.offeredPrice) * (listing.quantityKg / 40)
       
-      await prisma.transaction.create({
-        data: {
-          listingId: contactRequest.listingId,
-          requestId: contactRequest.id,
-          farmerId: contactRequest.farmerId,
-          millId: contactRequest.millId,
-          cropType: listing.cropType,
-          variety: listing.variety,
-          quantityKg: listing.quantityKg,
-          agreedPrice: contactRequest.offeredPrice,
-          totalAmount: totalPrice,
-          paymentMethod: 'bkash',
-          paymentStatus: 'pending',
-          deliveryStatus: 'pending',
-          finalPrice: contactRequest.offeredPrice
-        }
-      })
+      try {
+        await prisma.transaction.create({
+          data: {
+            listingId: contactRequest.listingId,
+            requestId: contactRequest.id,
+            farmerId: contactRequest.farmerId,
+            millId: contactRequest.millId,
+            cropType: listing.cropType,
+            variety: listing.variety,
+            quantityKg: listing.quantityKg,
+            agreedPrice: contactRequest.offeredPrice,
+            totalAmount: totalPrice,
+            paymentMethod: 'bkash',
+            paymentStatus: 'pending',
+            deliveryStatus: 'pending',
+            finalPrice: contactRequest.offeredPrice
+          }
+        })
+      } catch (txErr: any) {
+        console.error('Failed to create transaction:', txErr)
+        return NextResponse.json({ error: 'Failed to create transaction', details: txErr.message }, { status: 500 })
+      }
 
       // Update farmer profile completed deals
       await prisma.farmerProfile.update({
         where: { id: contactRequest.farmerId },
         data: { completedDeals: { increment: 1 } }
-      }).catch(() => {})
-
-      // Update mill profile completed deals
-      await prisma.farmerProfile.update({ // fallback if we want to store it under farmer, but wait - there is no completedDeals on MillProfile
-        where: { id: contactRequest.millId },
-        data: { completedDeals: { increment: 1 } }
-      }).catch(() => {})
+      }).catch((err) => console.error('Failed to update farmer completed deals:', err))
     }
 
     // Return format compatible with legacy bid
