@@ -630,7 +630,7 @@ export default function KrishiDam() {
   const fetchListings = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
     try {
-      const res = await fetch('/api/listings')
+      const res = await fetch(`/api/listings?t=${Date.now()}`, { cache: 'no-store' })
       if (!res.ok) {
         if (!silent) addToast('error', lang === 'BN' ? 'লিস্টিং লোড করতে ব্যর্থ হয়েছে' : 'Failed to load listings')
         return
@@ -1558,14 +1558,14 @@ export default function KrishiDam() {
     }
   }
 
-  // Real-time chat polling - fetch new messages every 2 seconds when drawer is open
+  // Real-time chat polling - fetch new messages every 1.5 seconds when drawer is open
   useEffect(() => {
     if (!showNegotiationDrawer || !selectedBid) return
 
     const pollMessages = async () => {
       try {
-        // Use the new efficient endpoint to fetch only this specific bid
-        const res = await fetch(`/api/bids?bidId=${selectedBid.id}`)
+        // Use the new efficient endpoint to fetch only this specific bid with cache bypassing
+        const res = await fetch(`/api/bids?bidId=${selectedBid.id}&t=${Date.now()}`, { cache: 'no-store' })
         if (res.ok) {
           const currentBid = await res.json()
           
@@ -1587,7 +1587,7 @@ export default function KrishiDam() {
                 const alreadyReceived = incomingMessages.some((srv: any) => 
                   srv.senderId === temp.senderId &&
                   srv.message === temp.message &&
-                  Math.abs(new Date(srv.createdAt).getTime() - new Date(temp.createdAt).getTime()) < 10000
+                  Math.abs(new Date(srv.createdAt).getTime() - new Date(temp.createdAt).getTime()) < 300000
                 )
                 if (!alreadyReceived) {
                   merged.push(temp)
@@ -1605,8 +1605,8 @@ export default function KrishiDam() {
       }
     }
 
-    // Poll every 2 seconds for faster updates
-    const interval = setInterval(pollMessages, 2000)
+    // Poll every 1.5 seconds for faster updates
+    const interval = setInterval(pollMessages, 1500)
     
     // Also poll immediately when drawer opens
     pollMessages()
@@ -4599,7 +4599,7 @@ export default function KrishiDam() {
                   <button 
                     onClick={async () => {
                       try {
-                        const res = await fetch(`/api/bids?bidId=${selectedBid.id}`)
+                        const res = await fetch(`/api/bids?bidId=${selectedBid.id}&t=${Date.now()}`, { cache: 'no-store' })
                         if (res.ok) {
                           const currentBid = await res.json()
                           if (currentBid && currentBid.messages) {
