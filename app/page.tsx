@@ -1454,9 +1454,35 @@ export default function KrishiDam() {
     if (!selectedBid || !chatInputText || !authUser || sendingMessageRef.current) return
     sendingMessageRef.current = true
     setSendingMessage(true)
+    
+    const trimmedText = chatInputText.trim()
+    const priceVal = chatInputPrice ? parseFloat(chatInputPrice) : null
+    
+    // Create optimistic message with temporary ID
+    const tempId = `temp-${Date.now()}`
+    const optimisticMessage = {
+      id: tempId,
+      senderId: authUser.id,
+      senderRole: role.toLowerCase(),
+      message: trimmedText,
+      priceOffered: priceVal,
+      createdAt: new Date().toISOString()
+    }
+    
+    // Immediately add to UI (optimistic update)
+    setSelectedBid(prev => {
+      if (!prev) return null
+      return { 
+        ...prev, 
+        messages: [...(prev.messages || []), optimisticMessage]
+      }
+    })
+    
+    // Clear input immediately
+    setChatInputText('')
+    setChatInputPrice('')
+    
     try {
-      const trimmedText = chatInputText.trim()
-      const priceVal = chatInputPrice ? parseFloat(chatInputPrice) : null
       const res = await fetch('/api/bids', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1469,33 +1495,53 @@ export default function KrishiDam() {
           priceOffered: priceVal
         })
       })
+      
       if (res.ok) {
         const newMsg = await res.json()
-        setChatInputText('')
-        setChatInputPrice('')
         addToast('success', lang === 'BN' ? 'বার্তা পাঠানো হয়েছে' : 'Message sent successfully')
         
-        // Append message to currently viewed bid to keep chat fluid
+        // Replace optimistic message with real one from server
         setSelectedBid(prev => {
           if (!prev) return null
-          const updatedMsgs = [...(prev.messages || []), {
-            id: newMsg.id,
-            senderId: newMsg.senderId,
-            senderRole: newMsg.senderRole,
-            message: newMsg.message,
-            priceOffered: newMsg.priceOffered ? Number(newMsg.priceOffered) : null,
-            createdAt: newMsg.createdAt
-          }]
+          const updatedMsgs = (prev.messages || []).map(msg => 
+            msg.id === tempId ? {
+              id: newMsg.id,
+              senderId: newMsg.senderId,
+              senderRole: newMsg.senderRole,
+              message: newMsg.message,
+              priceOffered: newMsg.priceOffered ? Number(newMsg.priceOffered) : null,
+              createdAt: newMsg.createdAt
+            } : msg
+          )
           return { ...prev, messages: updatedMsgs }
         })
 
         fetchListings()
       } else {
+        // Remove optimistic message on error
+        setSelectedBid(prev => {
+          if (!prev) return null
+          return {
+            ...prev,
+            messages: (prev.messages || []).filter(msg => msg.id !== tempId)
+          }
+        })
+        
         const errorData = await res.json()
         addToast('error', errorData.error || (lang === 'BN' ? 'বার্তা পাঠাতে ব্যর্থ হয়েছে' : 'Failed to send message'))
       }
     } catch (err) {
       console.error('Error sending message:', err)
+      
+      // Remove optimistic message on error
+      setSelectedBid(prev => {
+        if (!prev) return null
+        return {
+          ...prev,
+          messages: (prev.messages || []).filter(msg => msg.id !== tempId)
+        }
+      })
+      
       addToast('error', lang === 'BN' ? 'বার্তা পাঠাতে ব্যর্থ হয়েছে' : 'Failed to send message')
     } finally {
       sendingMessageRef.current = false
@@ -1514,14 +1560,35 @@ export default function KrishiDam() {
           const bids = await res.json()
           const currentBid = bids.find((b: any) => b.id === selectedBid.id)
           if (currentBid && currentBid.messages) {
-            // Only update if there are new messages
-            const currentMessageCount = selectedBid.messages?.length || 0
-            const newMessageCount = currentBid.messages.length
+            // Get local message IDs (excluding temporary ones)
+            const localMessageIds = new Set(
+              (selectedBid.messages || [])
+                .filter(msg => !msg.id.startsWith('temp-'))
+                .map(msg => msg.id)
+            )
             
-            if (newMessageCount > currentMessageCount) {
+            // Find messages from server that we don't have locally
+            const newMessages = currentBid.messages.filter(
+              (msg: any) => !localMessageIds.has(msg.id)
+            )
+            
+            // Only update if there are genuinely new messages from the other party
+            if (newMessages.length > 0) {
               setSelectedBid(prev => {
                 if (!prev) return null
-                return { ...prev, messages: currentBid.messages }
+                // Merge local messages (including optimistic ones) with new server messages
+                const allMessageIds = new Set([
+                  ...(prev.messages || []).map(msg => msg.id),
+                  ...newMessages.map((msg: any) => msg.id)
+                ])
+                
+                // Combine and sort by createdAt
+                const mergedMessages = [
+                  ...(prev.messages || []),
+                  ...newMessages
+                ].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+                
+                return { ...prev, messages: mergedMessages }
               })
             }
           }
@@ -1531,8 +1598,8 @@ export default function KrishiDam() {
       }
     }
 
-    // Poll every 3 seconds
-    const interval = setInterval(pollMessages, 3000)
+    // Poll every 2 seconds for faster updates
+    const interval = setInterval(pollMessages, 2000)
     
     // Also poll immediately when drawer opens
     pollMessages()
@@ -4542,6 +4609,7 @@ export default function KrishiDam() {
               )}
               {selectedBid.messages && selectedBid.messages.map((msg: any) => {
                 const isMe = msg.senderId === authUser?.id
+                const isSending = msg.id.startsWith('temp-')
                 return (
                   <div 
                     key={msg.id}
@@ -4549,9 +4617,17 @@ export default function KrishiDam() {
                       isMe 
                         ? 'self-end bg-brand-green/10 text-text-primary border-brand-green/20' 
                         : 'self-start bg-surface border-text-secondary/10 text-text-primary'
-                    }`}
+                    } ${isSending ? 'opacity-70' : ''}`}
                   >
-                    <div className="font-bold text-[9px] text-text-secondary uppercase mb-0.5">{msg.senderRole}</div>
+                    <div className="font-bold text-[9px] text-text-secondary uppercase mb-0.5 flex items-center gap-1">
+                      {msg.senderRole}
+                      {isSending && (
+                        <span className="flex items-center gap-1 text-[8px] text-text-secondary/60">
+                          <span className="w-1.5 h-1.5 rounded-full bg-brand-green animate-pulse" />
+                          {lang === 'BN' ? 'পাঠানো হচ্ছে...' : 'Sending...'}
+                        </span>
+                      )}
+                    </div>
                     <div>{msg.message}</div>
                     {msg.priceOffered && (
                       <div className="mt-1.5 p-1 bg-background/50 rounded font-bold font-mono text-[10px] text-brand-green">
