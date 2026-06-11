@@ -441,7 +441,7 @@ model Complaint {
   targetUserId    String?            @db.Uuid @map("target_user_id")
   targetUser      User?              @relation("ComplaintsTargeted", fields: [targetUserId], references: [id])
   
-  transactionId   String?            @db.Uuid @map("transaction_id")
+  transactionId   String?            @unique @db.Uuid @map("transaction_id")
   transaction     Transaction?       @relation(fields: [transactionId], references: [id])
   
   listingId       String?            @db.Uuid @map("listing_id")
@@ -452,7 +452,7 @@ model Complaint {
   
   aiCategory      String?            @map("ai_category")
   aiPriority      String?            @map("ai_priority")
-  aiFraudScore    Float?             @map("ai_fraud_score") @db.Double
+  aiFraudScore    Float?             @map("ai_fraud_score")
   aiSummary       String?            @map("ai_summary")
   aiSuggestion    String?            @map("ai_suggestion")
   aiAnalyzedAt    DateTime?          @map("ai_analyzed_at")
@@ -495,7 +495,7 @@ model AiPrediction {
   
   inputData       Json?     @map("input_data")
   outputData      Json      @map("output_data")
-  confidence      Float?    @db.Double
+  confidence      Float?
   modelVersion    String?   @map("model_version")
   
   createdBy       String?   @db.Uuid @map("created_by")
