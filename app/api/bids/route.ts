@@ -262,13 +262,30 @@ export async function PATCH(request: Request) {
         data: { status: 'sold' }
       })
 
-      // Create final transaction
+      // Create or update final transaction (upsert to handle any existing transaction)
       const listing = contactRequest.listing
       const totalPrice = Number(contactRequest.offeredPrice) * (listing.quantityKg / 40)
       
       try {
-        await prisma.transaction.create({
-          data: {
+        await prisma.transaction.upsert({
+          where: {
+            listingId: contactRequest.listingId
+          },
+          update: {
+            requestId: contactRequest.id,
+            farmerId: contactRequest.farmerId,
+            millId: contactRequest.millId,
+            cropType: listing.cropType,
+            variety: listing.variety,
+            quantityKg: listing.quantityKg,
+            agreedPrice: contactRequest.offeredPrice,
+            totalAmount: totalPrice,
+            paymentMethod: 'bkash',
+            paymentStatus: 'pending',
+            deliveryStatus: 'pending',
+            finalPrice: contactRequest.offeredPrice
+          },
+          create: {
             listingId: contactRequest.listingId,
             requestId: contactRequest.id,
             farmerId: contactRequest.farmerId,

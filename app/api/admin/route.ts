@@ -125,8 +125,17 @@ export async function GET(request: Request) {
         orderBy: { createdAt: 'desc' }
       })
       
+      // Get unique varieties (latest price per variety+season)
+      const uniquePrices = new Map()
+      govtPrices.forEach(gp => {
+        const key = `${gp.variety}_${gp.season}`
+        if (!uniquePrices.has(key)) {
+          uniquePrices.set(key, gp)
+        }
+      })
+      
       // Map back to compatible AI floor price structures for dashboard
-      return NextResponse.json(govtPrices.map(gp => ({
+      return NextResponse.json(Array.from(uniquePrices.values()).map(gp => ({
         id: gp.id,
         variety: gp.variety,
         season: gp.season,
@@ -424,18 +433,43 @@ export async function POST(request: Request) {
       const effectiveTo = new Date()
       effectiveTo.setMonth(effectiveTo.getMonth() + 6) // valid for 6 months
 
-      const govtPrice = await prisma.govtPrice.create({
-        data: {
-          cropType: 'boro', // default crop category
+      // Check if price already exists for this variety+season
+      const existingPrice = await prisma.govtPrice.findFirst({
+        where: {
           variety: variety || 'BRRI dhan28',
-          pricePer40kg: newPrice,
-          pricePerKg: newPrice / 40,
-          season: season || 'Boro',
-          effectiveFrom,
-          effectiveTo,
-          createdBy: adminId
-        }
+          season: season || 'Boro'
+        },
+        orderBy: { createdAt: 'desc' }
       })
+
+      let govtPrice
+      if (existingPrice) {
+        // Update existing price
+        govtPrice = await prisma.govtPrice.update({
+          where: { id: existingPrice.id },
+          data: {
+            pricePer40kg: newPrice,
+            pricePerKg: newPrice / 40,
+            effectiveFrom,
+            effectiveTo,
+            updatedBy: adminId
+          }
+        })
+      } else {
+        // Create new price entry
+        govtPrice = await prisma.govtPrice.create({
+          data: {
+            cropType: 'boro', // default crop category
+            variety: variety || 'BRRI dhan28',
+            pricePer40kg: newPrice,
+            pricePerKg: newPrice / 40,
+            season: season || 'Boro',
+            effectiveFrom,
+            effectiveTo,
+            createdBy: adminId
+          }
+        })
+      }
 
       // Audit Log
       await prisma.adminAction.create({
@@ -444,7 +478,7 @@ export async function POST(request: Request) {
           actionType: 'price_update',
           targetType: 'govt_price',
           targetId: govtPrice.id,
-          description: `Admin updated govt price for ${variety} (${season}) to ৳${newPrice}/maund`
+          description: `Admin ${existingPrice ? 'updated' : 'set'} govt price for ${variety} (${season}) to ৳${newPrice}/maund`
         }
       })
 
@@ -454,7 +488,7 @@ export async function POST(request: Request) {
         season: govtPrice.season,
         floorPrice: Number(govtPrice.pricePer40kg),
         adminOverride: Number(govtPrice.pricePer40kg),
-        updatedAt: govtPrice.createdAt.toISOString()
+        updatedAt: govtPrice.updatedAt ? govtPrice.updatedAt.toISOString() : govtPrice.createdAt.toISOString()
       })
     }
 

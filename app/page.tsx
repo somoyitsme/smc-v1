@@ -523,7 +523,7 @@ export default function KrishiDam() {
   const [millInventories, setMillInventories] = useState<MillInventory[]>([])
   const [showInventoryModal, setShowInventoryModal] = useState(false)
   const [inventoryFormData, setInventoryFormData] = useState({
-    riceType: 'Miniket Raw', category: 'fine', quantityKg: '2000', pricePerKg: '65', notes: ''
+    riceType: '', category: 'fine', quantityKg: '2000', pricePerKg: '65', notes: ''
   })
   const [adminDisputes, setAdminDisputes] = useState<any[]>([])
   const [selectedDispute, setSelectedDispute] = useState<any | null>(null)
@@ -1395,7 +1395,7 @@ export default function KrishiDam() {
       if (res.ok) {
         addToast('success', lang === 'BN' ? 'চাল স্টক তালিকাভুক্ত করা হয়েছে' : 'Processed rice stock listed')
         setShowInventoryModal(false)
-        setInventoryFormData({ riceType: 'Miniket Raw', category: 'fine', quantityKg: '2000', pricePerKg: '65', notes: '' })
+        setInventoryFormData({ riceType: '', category: 'fine', quantityKg: '2000', pricePerKg: '65', notes: '' })
         fetchMillInventories()
       } else {
         const errorData = await res.json()
@@ -4012,13 +4012,20 @@ export default function KrishiDam() {
             <form onSubmit={handleCreateInventory} className="flex flex-col gap-4">
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-bold text-text-secondary uppercase tracking-wider">{t.variety}</label>
-                <input 
-                  type="text"
+                <select 
                   required
                   value={inventoryFormData.riceType}
                   onChange={e => setInventoryFormData(prev => ({ ...prev, riceType: e.target.value }))}
-                  className="bg-background border border-text-secondary/15 rounded-custom px-3 py-2 text-sm text-text-primary focus:border-brand-green outline-none"
-                />
+                  className="bg-background border border-text-secondary/15 rounded-custom px-3 py-2 text-sm text-text-primary focus:border-brand-green outline-none cursor-pointer"
+                >
+                  <option value="">Select Rice Variety</option>
+                  <option value="BRRI dhan28">BRRI dhan28</option>
+                  <option value="BRRI dhan29">BRRI dhan29</option>
+                  <option value="Miniket">Miniket</option>
+                  <option value="Nazirshail">Nazirshail</option>
+                  <option value="BRRI dhan49">BRRI dhan49</option>
+                  <option value="Chinigura">Chinigura</option>
+                </select>
               </div>
 
               <div className="flex flex-col gap-1">
