@@ -120,6 +120,8 @@ model User {
   adminActions          AdminAction[]         @relation("AdminActions")
   platformSettings      PlatformSettings[]
   suspendedMills        MillProfile[]         @relation("SuspendedBy")
+  complaintsFiled       Complaint[]           @relation("ComplaintsFiled")
+  complaintsTargeted    Complaint[]           @relation("ComplaintsTargeted")
 
   @@map("users")
 }
@@ -184,6 +186,7 @@ model CropListing {
 
   contactRequests   ContactRequest[]
   transaction       Transaction?
+  complaints        Complaint[]
 
   @@map("crop_listings")
 }
@@ -254,6 +257,7 @@ model Transaction {
 
   priceRevisions  PriceRevision[]
   cards           MillCard[]
+  complaint       Complaint?
 
   @@map("transactions")
 }
@@ -398,4 +402,105 @@ model PlatformSettings {
   updater     User?     @relation(fields: [updatedBy], references: [id])
 
   @@map("platform_settings")
+}
+
+// ─── AI FEATURES: COMPLAINTS, DEMAND HISTORY, PREDICTIONS ──────
+
+enum ComplaintStatus {
+  pending
+  under_review
+  resolved
+  dismissed
+}
+
+enum ComplaintCategory {
+  overpricing
+  delivery_issue
+  fraud
+  product_quality
+  other
+}
+
+enum ComplaintPriority {
+  high
+  medium
+  low
+}
+
+model Complaint {
+  id              String             @id @default(uuid()) @db.Uuid
+  title           String
+  description     String
+  category        ComplaintCategory  @default(other)
+  priority        ComplaintPriority  @default(medium)
+  status          ComplaintStatus    @default(pending)
+  
+  filedBy         String             @db.Uuid @map("filed_by")
+  filedByUser     User               @relation("ComplaintsFiled", fields: [filedBy], references: [id])
+  
+  targetUserId    String?            @db.Uuid @map("target_user_id")
+  targetUser      User?              @relation("ComplaintsTargeted", fields: [targetUserId], references: [id])
+  
+  transactionId   String?            @db.Uuid @map("transaction_id")
+  transaction     Transaction?       @relation(fields: [transactionId], references: [id])
+  
+  listingId       String?            @db.Uuid @map("listing_id")
+  listing         CropListing?       @relation(fields: [listingId], references: [id])
+  
+  district        String?
+  upazila         String?
+  
+  aiCategory      String?            @map("ai_category")
+  aiPriority      String?            @map("ai_priority")
+  aiFraudScore    Float?             @map("ai_fraud_score") @db.Double
+  aiSummary       String?            @map("ai_summary")
+  aiSuggestion    String?            @map("ai_suggestion")
+  aiAnalyzedAt    DateTime?          @map("ai_analyzed_at")
+  
+  adminNotes      String?            @map("admin_notes")
+  resolvedAt      DateTime?          @map("resolved_at")
+  resolvedBy      String?            @db.Uuid @map("resolved_by")
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+
+  @@map("complaints")
+}
+
+model DemandHistory {
+  id              String    @id @default(uuid()) @db.Uuid
+  cropType        String    @map("crop_type")
+  variety         String
+  district        String
+  recordedDate    DateTime  @db.Date @map("recorded_date")
+  
+  demandQuantity  Int       @map("demand_quantity")
+  supplyQuantity  Int?      @map("supply_quantity")
+  avgPrice        Decimal   @db.Decimal(10, 2) @map("avg_price")
+  
+  season          String?
+  source          String?   @default("system")
+  
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@unique([cropType, variety, district, recordedDate])
+  @@map("demand_history")
+}
+
+model AiPrediction {
+  id              String    @id @default(uuid()) @db.Uuid
+  predictionType  String    @map("prediction_type")
+  targetType      String    @map("target_type")
+  targetId        String?   @db.Uuid @map("target_id")
+  
+  inputData       Json?     @map("input_data")
+  outputData      Json      @map("output_data")
+  confidence      Float?    @db.Double
+  modelVersion    String?   @map("model_version")
+  
+  createdBy       String?   @db.Uuid @map("created_by")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  expiresAt       DateTime? @map("expires_at")
+
+  @@map("ai_predictions")
 }

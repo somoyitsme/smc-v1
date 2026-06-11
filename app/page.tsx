@@ -530,6 +530,16 @@ export default function KrishiDam() {
   const [adminRulingText, setAdminRulingText] = useState('')
   const [adminRulingPrice, setAdminRulingPrice] = useState('')
 
+  // AI Features States
+  const [aiComplaints, setAiComplaints] = useState<any[]>([])
+  const [aiFraudData, setAiFraudData] = useState<any | null>(null)
+  const [aiForecastData, setAiForecastData] = useState<any | null>(null)
+  const [aiForecastSummaries, setAiForecastSummaries] = useState<any[]>([])
+  const [aiInsights, setAiInsights] = useState<any[]>([])
+  const [aiLoading, setAiLoading] = useState(false)
+  const [showNewComplaintModal, setShowNewComplaintModal] = useState(false)
+  const [complaintForm, setComplaintForm] = useState({ title: '', description: '', targetUserId: '', transactionId: '', listingId: '', district: '', upazila: '' })
+
   // Hash Router States
   const [currentHash, setCurrentHash] = useState('#/')
   const [warningCards, setWarningCards] = useState<any[]>([])
@@ -674,6 +684,116 @@ export default function KrishiDam() {
       addToast('error', lang === 'BN' ? 'অ্যাডমিন ডাটা লোড করতে ব্যর্থ হয়েছে' : 'Failed to load admin data')
     }
   }, [addToast, lang])
+
+  const fetchAiComplaints = useCallback(async () => {
+    try {
+      const res = await fetch('/api/ai/complaints')
+      if (!res.ok) return
+      const data = await res.json()
+      if (Array.isArray(data)) setAiComplaints(data)
+    } catch { /* silently fail */ }
+  }, [])
+
+  const fetchAiFraud = useCallback(async () => {
+    try {
+      const res = await fetch('/api/ai/fraud')
+      if (!res.ok) return
+      const data = await res.json()
+      if (data && typeof data === 'object' && !data.error) setAiFraudData(data)
+    } catch { /* silently fail */ }
+  }, [])
+
+  const fetchAiForecast = useCallback(async () => {
+    try {
+      const [forecastRes, summariesRes] = await Promise.all([
+        fetch('/api/ai/forecast'),
+        fetch('/api/ai/forecast?action=summaries'),
+      ])
+      if (forecastRes.ok) {
+        const data = await forecastRes.json()
+        if (data && typeof data === 'object' && !data.error) setAiForecastData(data)
+      }
+      if (summariesRes.ok) {
+        const data = await summariesRes.json()
+        if (Array.isArray(data)) setAiForecastSummaries(data)
+      }
+    } catch { /* silently fail */ }
+  }, [])
+
+  const fetchAiAnalytics = useCallback(async () => {
+    try {
+      const res = await fetch('/api/ai/analytics')
+      if (!res.ok) return
+      const data = await res.json()
+      if (data && typeof data === 'object' && !data.error) {
+        if (Array.isArray(data.insights)) setAiInsights(data.insights)
+      }
+    } catch { /* silently fail */ }
+  }, [])
+
+  const fetchAllAiData = useCallback(async () => {
+    setAiLoading(true)
+    await Promise.all([fetchAiComplaints(), fetchAiFraud(), fetchAiForecast(), fetchAiAnalytics()])
+    setAiLoading(false)
+  }, [fetchAiComplaints, fetchAiFraud, fetchAiForecast, fetchAiAnalytics])
+
+  const handleCreateComplaint = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!complaintForm.title || !complaintForm.description || !authUser) return
+    try {
+      const res = await fetch('/api/ai/complaints', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'create',
+          title: complaintForm.title,
+          description: complaintForm.description,
+          filedBy: authUser.id,
+          targetUserId: complaintForm.targetUserId || undefined,
+          transactionId: complaintForm.transactionId || undefined,
+          listingId: complaintForm.listingId || undefined,
+          district: complaintForm.district || undefined,
+          upazila: complaintForm.upazila || undefined,
+        })
+      })
+      if (res.ok) {
+        addToast('success', lang === 'BN' ? 'অভিযোগ সফলভাবে দায়ের করা হয়েছে' : 'Complaint filed successfully')
+        setShowNewComplaintModal(false)
+        setComplaintForm({ title: '', description: '', targetUserId: '', transactionId: '', listingId: '', district: '', upazila: '' })
+        fetchAiComplaints()
+      } else {
+        const data = await res.json()
+        addToast('error', data.error || 'Failed to file complaint')
+      }
+    } catch {
+      addToast('error', 'Network error filing complaint')
+    }
+  }
+
+  const handleUpdateComplaintStatus = async (complaintId: string, status: string) => {
+    if (!authUser) return
+    try {
+      const res = await fetch('/api/ai/complaints', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'update-status',
+          complaintId,
+          status,
+          resolvedBy: authUser.id,
+        })
+      })
+      if (res.ok) {
+        addToast('success', lang === 'BN' ? 'অভিযোগের অবস্থা আপডেট করা হয়েছে' : 'Complaint status updated')
+        fetchAiComplaints()
+      } else {
+        const data = await res.json()
+        addToast('error', data.error || 'Failed to update status')
+      }
+    } catch {
+      addToast('error', 'Network error updating complaint')
+    }
+  }
 
   // Admin Cards override handler
   const handleOverrideCard = async (cardId: string, reason: string) => {
@@ -833,10 +953,11 @@ export default function KrishiDam() {
       fetchAdminDisputes()
       fetchPlatformSettings()
       fetchAnalyticsData()
+      fetchAllAiData()
     }
     if (role === 'MARKET') fetchListings()
     if (role === 'PRICING') fetchPlatformSettings()
-  }, [role, fetchListings, fetchMarketPrices, fetchMarketStats, fetchAdminData, fetchMillInventories, fetchAdminDisputes, fetchRecentTransactions, fetchPlatformSettings, fetchAnalyticsData])
+  }, [role, fetchListings, fetchMarketPrices, fetchMarketStats, fetchAdminData, fetchMillInventories, fetchAdminDisputes, fetchRecentTransactions, fetchPlatformSettings, fetchAnalyticsData, fetchAllAiData])
 
   // Calculate AI price when listing form changes
   useEffect(() => {
@@ -2355,6 +2476,16 @@ export default function KrishiDam() {
             >
               {lang === 'BN' ? 'বিশ্লেষণ' : 'Analytics'}
             </button>
+            <button 
+              onClick={() => window.location.hash = '#/admin/ai'}
+              className={`pb-2 text-sm font-bold border-b-2 transition-all cursor-pointer bg-transparent border-none whitespace-nowrap flex items-center gap-1.5 ${
+                currentHash === '#/admin/ai' 
+                  ? 'border-brand-green text-brand-green' 
+                  : 'border-transparent text-text-secondary hover:text-brand-green'
+              }`}
+            >
+              <Zap className="w-3.5 h-3.5" /> {lang === 'BN' ? 'এআই ইন্টেলিজেন্স' : 'AI Intelligence'}
+            </button>
           </div>
 
           {/* Sub View contents switch */}
@@ -2687,7 +2818,287 @@ export default function KrishiDam() {
             </div>
           )}
 
-          {(currentHash === '#/admin' || !['#/admin/prices', '#/admin/cards', '#/admin/disputes', '#/admin/settings', '#/admin/analytics'].includes(currentHash)) && (
+          {/* AI Intelligence Sub-View */}
+          {currentHash === '#/admin/ai' && (
+            <div className="animate-slide-up flex flex-col gap-8">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-black flex items-center gap-2"><Zap className="w-5 h-5 text-brand-green" /> {lang === 'BN' ? 'এআই ইন্টেলিজেন্স ড্যাশবোর্ড' : 'AI Intelligence Dashboard'}</h2>
+                <div className="flex gap-2">
+                  <button onClick={fetchAllAiData} disabled={aiLoading} className="bg-brand-green hover:bg-brand-dark text-background text-xs font-bold px-4 py-2 rounded-custom flex items-center gap-1.5 border-none cursor-pointer disabled:opacity-50">
+                    <Activity className="w-3.5 h-3.5" /> {aiLoading ? (lang === 'BN' ? 'লোড হচ্ছে...' : 'Loading...') : (lang === 'BN' ? 'রিফ্রেশ' : 'Refresh')}
+                  </button>
+                  <button onClick={() => setShowNewComplaintModal(true)} className="bg-info hover:bg-info/80 text-background text-xs font-bold px-4 py-2 rounded-custom flex items-center gap-1.5 border-none cursor-pointer">
+                    <Plus className="w-3.5 h-3.5" /> {lang === 'BN' ? 'নতুন অভিযোগ' : 'New Complaint'}
+                  </button>
+                </div>
+              </div>
+
+              {/* AI Insights Cards */}
+              {aiInsights.length > 0 && (
+                <div>
+                  <h3 className="text-base font-black mb-4 flex items-center gap-1.5"><Eye className="w-4 h-4 text-brand-green" /> {lang === 'BN' ? 'এআই ইনসাইটস' : 'AI Insights'}</h3>
+                  <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {aiInsights.map((insight: any) => (
+                      <div key={insight.id} className={`bg-surface border rounded-custom p-4 flex flex-col gap-2 ${
+                        insight.type === 'danger' ? 'border-danger/30' :
+                        insight.type === 'warning' ? 'border-warning/30' :
+                        insight.type === 'success' ? 'border-success/30' :
+                        'border-info/30'
+                      }`}>
+                        <div className="flex items-center gap-2">
+                          {insight.type === 'danger' && <AlertTriangle className="w-4 h-4 text-danger" />}
+                          {insight.type === 'warning' && <AlertTriangle className="w-4 h-4 text-warning" />}
+                          {insight.type === 'success' && <CheckCircle2 className="w-4 h-4 text-success" />}
+                          {insight.type === 'info' && <Info className="w-4 h-4 text-info" />}
+                          <span className="text-sm font-black">{insight.title}</span>
+                        </div>
+                        <p className="text-xs text-text-secondary leading-relaxed">{insight.description}</p>
+                        {insight.metricValue && (
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-xs font-bold text-text-secondary">{insight.metric}:</span>
+                            <span className={`text-sm font-black font-mono ${
+                              insight.type === 'danger' ? 'text-danger' :
+                              insight.type === 'warning' ? 'text-warning' :
+                              insight.type === 'success' ? 'text-success' :
+                              'text-info'
+                            }`}>{insight.metricValue}</span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Fraud Detection Overview */}
+              {aiFraudData && (
+                <div>
+                  <h3 className="text-base font-black mb-4 flex items-center gap-1.5"><Shield className="w-4 h-4 text-danger" /> {lang === 'BN' ? 'ফ্রড ডিটেকশন' : 'Fraud Detection'}</h3>
+                  <div className="grid md:grid-cols-4 gap-4 mb-4">
+                    <div className={`bg-surface border rounded-custom p-5 text-center ${
+                      aiFraudData.overall?.riskLevel === 'critical' ? 'border-danger/30' :
+                      aiFraudData.overall?.riskLevel === 'high' ? 'border-warning/30' :
+                      aiFraudData.overall?.riskLevel === 'medium' ? 'border-info/30' :
+                      'border-success/30'
+                    }`}>
+                      <div className="text-xs text-text-secondary font-bold uppercase tracking-wider">{lang === 'BN' ? 'সামগ্রিক ঝুঁকি' : 'Overall Risk'}</div>
+                      <div className={`text-3xl font-black font-mono mt-2 ${
+                        aiFraudData.overall?.riskLevel === 'critical' ? 'text-danger' :
+                        aiFraudData.overall?.riskLevel === 'high' ? 'text-warning' :
+                        aiFraudData.overall?.riskLevel === 'medium' ? 'text-info' :
+                        'text-success'
+                      }`}>{aiFraudData.overall?.riskScore || 0}</div>
+                      <div className={`text-xs font-bold mt-1 uppercase ${
+                        aiFraudData.overall?.riskLevel === 'critical' ? 'text-danger' :
+                        aiFraudData.overall?.riskLevel === 'high' ? 'text-warning' :
+                        aiFraudData.overall?.riskLevel === 'medium' ? 'text-info' :
+                        'text-success'
+                      }`}>{aiFraudData.overall?.riskLevel || 'low'}</div>
+                    </div>
+                    <div className="bg-surface border border-text-secondary/10 rounded-custom p-5 text-center">
+                      <div className="text-xs text-text-secondary font-bold uppercase tracking-wider">{lang === 'BN' ? 'মূল্য হেরফের' : 'Price Manipulation'}</div>
+                      <div className="text-3xl font-black font-mono mt-2 text-brand-green">{aiFraudData.priceManipulation?.riskScore || 0}</div>
+                      <div className="text-xs text-text-secondary font-bold mt-1">{aiFraudData.priceManipulation?.flags?.length || 0} flags</div>
+                    </div>
+                    <div className="bg-surface border border-text-secondary/10 rounded-custom p-5 text-center">
+                      <div className="text-xs text-text-secondary font-bold uppercase tracking-wider">{lang === 'BN' ? 'মিল অস্বাভাবিকতা' : 'Mill Anomalies'}</div>
+                      <div className="text-3xl font-black font-mono mt-2 text-brand-green">{aiFraudData.millAnomalies?.filter((m: any) => m.result.riskScore >= 40).length || 0}</div>
+                      <div className="text-xs text-text-secondary font-bold mt-1">{lang === 'BN' ? 'উচ্চ ঝুঁকি' : 'High Risk'}</div>
+                    </div>
+                    <div className="bg-surface border border-text-secondary/10 rounded-custom p-5 text-center">
+                      <div className="text-xs text-text-secondary font-bold uppercase tracking-wider">{lang === 'BN' ? 'অভিযোগ ফ্রড' : 'Complaint Fraud'}</div>
+                      <div className="text-3xl font-black font-mono mt-2 text-brand-green">{aiFraudData.complaintFraud?.riskScore || 0}</div>
+                      <div className="text-xs text-text-secondary font-bold mt-1">{aiFraudData.complaintFraud?.flags?.length || 0} flags</div>
+                    </div>
+                  </div>
+
+                  {/* Fraud Alerts */}
+                  {aiFraudData.alerts?.length > 0 && (
+                    <div className="bg-surface border border-danger/20 rounded-custom p-4">
+                      <h4 className="text-sm font-black text-danger mb-3 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4" /> {lang === 'BN' ? 'সক্রিয় ফ্রড সতর্কতা' : 'Active Fraud Alerts'}</h4>
+                      <div className="flex flex-col gap-2">
+                        {aiFraudData.alerts.map((alert: any) => (
+                          <div key={alert.id} className="flex items-center gap-3 p-3 bg-background border border-danger/10 rounded-custom">
+                            <div className={`w-2 h-2 rounded-full ${
+                              alert.riskLevel === 'critical' ? 'bg-danger' :
+                              alert.riskLevel === 'high' ? 'bg-warning' : 'bg-info'
+                            }`} />
+                            <div className="flex-1">
+                              <span className="text-xs font-bold">{alert.targetName}</span>
+                              <span className="text-xs text-text-secondary ml-2">({alert.riskScore}/100)</span>
+                            </div>
+                            <span className="text-xs text-text-secondary max-w-xs truncate">{alert.reason}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Complaint Triage */}
+              <div>
+                <h3 className="text-base font-black mb-4 flex items-center gap-1.5"><FileText className="w-4 h-4 text-brand-green" /> {lang === 'BN' ? 'অভিযোগ ট্রায়াজ' : 'Complaint Triage'}</h3>
+                {aiComplaints.length > 0 ? (
+                  <div className="overflow-x-auto border border-text-secondary/10 rounded-custom bg-surface">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-text-secondary/5 border-b border-text-secondary/10">
+                          <th className="p-3 text-xs font-bold text-text-secondary uppercase tracking-wider">{lang === 'BN' ? 'শিরোনাম' : 'Title'}</th>
+                          <th className="p-3 text-xs font-bold text-text-secondary uppercase tracking-wider">{lang === 'BN' ? 'বিভাগ' : 'Category'}</th>
+                          <th className="p-3 text-xs font-bold text-text-secondary uppercase tracking-wider">{lang === 'BN' ? 'অগ্রাধিকার' : 'Priority'}</th>
+                          <th className="p-3 text-xs font-bold text-text-secondary uppercase tracking-wider">{lang === 'BN' ? 'ফ্রড স্কোর' : 'Fraud Score'}</th>
+                          <th className="p-3 text-xs font-bold text-text-secondary uppercase tracking-wider">{lang === 'BN' ? 'অবস্থা' : 'Status'}</th>
+                          <th className="p-3 text-xs font-bold text-text-secondary uppercase tracking-wider text-right">{lang === 'BN' ? 'অ্যাকশন' : 'Actions'}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {aiComplaints.map((c: any) => (
+                          <tr key={c.id} className="border-b border-text-secondary/5 hover:bg-text-secondary/5 transition-all">
+                            <td className="p-3">
+                              <div className="font-bold text-sm">{c.title}</div>
+                              {c.aiSummary && <div className="text-xs text-text-secondary mt-1 max-w-xs truncate">{c.aiSummary}</div>}
+                            </td>
+                            <td className="p-3">
+                              <span className={`px-2 py-0.5 rounded text-xs font-bold border ${
+                                c.aiCategory === 'fraud' ? 'bg-danger/10 text-danger border-danger/20' :
+                                c.aiCategory === 'overpricing' ? 'bg-warning/10 text-warning border-warning/20' :
+                                c.aiCategory === 'delivery_issue' ? 'bg-info/10 text-info border-info/20' :
+                                c.aiCategory === 'product_quality' ? 'bg-purple-500/10 text-purple-500 border-purple-500/20' :
+                                'bg-text-secondary/10 text-text-secondary border-text-secondary/20'
+                              }`}>{c.aiCategory || c.category}</span>
+                            </td>
+                            <td className="p-3">
+                              <span className={`px-2 py-0.5 rounded text-xs font-bold ${
+                                c.aiPriority === 'high' ? 'text-danger' :
+                                c.aiPriority === 'medium' ? 'text-warning' :
+                                'text-success'
+                              }`}>{c.aiPriority || c.priority}</span>
+                            </td>
+                            <td className="p-3">
+                              <span className={`text-sm font-mono font-bold ${
+                                (c.aiFraudScore || 0) >= 70 ? 'text-danger' :
+                                (c.aiFraudScore || 0) >= 40 ? 'text-warning' :
+                                'text-success'
+                              }`}>{c.aiFraudScore || 0}</span>
+                            </td>
+                            <td className="p-3">
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-bold border ${
+                                c.status === 'resolved' ? 'bg-success/10 text-success border-success/20' :
+                                c.status === 'dismissed' ? 'bg-text-secondary/10 text-text-secondary border-text-secondary/20' :
+                                c.status === 'under_review' ? 'bg-info/10 text-info border-info/20' :
+                                'bg-warning/10 text-warning border-warning/20'
+                              }`}>{c.status}</span>
+                            </td>
+                            <td className="p-3 text-right">
+                              {c.status === 'pending' && (
+                                <button
+                                  onClick={() => handleUpdateComplaintStatus(c.id, 'under_review')}
+                                  className="bg-info/10 hover:bg-info/20 text-info text-xs font-bold px-2 py-1 rounded border border-info/20 cursor-pointer"
+                                >
+                                  {lang === 'BN' ? 'পর্যালোচনা' : 'Review'}
+                                </button>
+                              )}
+                              {c.status === 'under_review' && (
+                                <button
+                                  onClick={() => handleUpdateComplaintStatus(c.id, 'resolved')}
+                                  className="bg-success/10 hover:bg-success/20 text-success text-xs font-bold px-2 py-1 rounded border border-success/20 cursor-pointer"
+                                >
+                                  {lang === 'BN' ? 'সমাধান' : 'Resolve'}
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="bg-surface border border-text-secondary/10 rounded-custom p-6 text-center text-xs text-text-secondary italic">
+                    {lang === 'BN' ? 'কোনো অভিযোগ নেই' : 'No complaints filed yet'}
+                  </div>
+                )}
+              </div>
+
+              {/* Demand Forecast */}
+              {aiForecastData && (
+                <div>
+                  <h3 className="text-base font-black mb-4 flex items-center gap-1.5"><TrendingUp className="w-4 h-4 text-brand-green" /> {lang === 'BN' ? 'ডিমান্ড ফোরকাস্ট' : 'Demand Forecast'}</h3>
+                  <div className="grid md:grid-cols-3 gap-4 mb-4">
+                    <div className="bg-surface border border-text-secondary/10 rounded-custom p-5">
+                      <div className="text-xs text-text-secondary font-bold uppercase tracking-wider">{lang === 'BN' ? 'প্রবণতা' : 'Trend'}</div>
+                      <div className={`text-2xl font-black mt-2 ${
+                        aiForecastData.trend === 'increasing' ? 'text-success' :
+                        aiForecastData.trend === 'decreasing' ? 'text-danger' :
+                        'text-info'
+                      }`}>{aiForecastData.trend?.toUpperCase()}</div>
+                      <div className="text-xs text-text-secondary mt-1">{aiForecastData.trendPercent || 0}% change</div>
+                    </div>
+                    <div className="bg-surface border border-text-secondary/10 rounded-custom p-5">
+                      <div className="text-xs text-text-secondary font-bold uppercase tracking-wider">{lang === 'BN' ? 'আত্মবিশ্বাস' : 'Confidence'}</div>
+                      <div className="text-2xl font-black font-mono text-brand-green mt-2">{aiForecastData.confidence || 0}%</div>
+                      <div className="text-xs text-text-secondary mt-1">{aiForecastData.variety} / {aiForecastData.district}</div>
+                    </div>
+                    <div className="bg-surface border border-text-secondary/10 rounded-custom p-5">
+                      <div className="text-xs text-text-secondary font-bold uppercase tracking-wider">{lang === 'BN' ? 'পয়েন্ট' : 'Data Points'}</div>
+                      <div className="text-2xl font-black font-mono text-brand-green mt-2">{aiForecastData.forecasts?.length || 0}</div>
+                      <div className="text-xs text-text-secondary mt-1">{lang === 'BN' ? 'ঐতিহাসিক + পূর্বাভাস' : 'Historical + Forecast'}</div>
+                    </div>
+                  </div>
+
+                  {/* Forecast Chart */}
+                  {aiForecastData.forecasts?.length > 0 && (
+                    <div className="bg-surface border border-text-secondary/10 rounded-custom p-6">
+                      <h4 className="text-sm font-black mb-4">{lang === 'BN' ? 'ডিমান্ড পূর্বাভাস চার্ট' : 'Demand Forecast Chart'}</h4>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <LineChart data={aiForecastData.forecasts}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="var(--text-secondary)" opacity={0.1} />
+                          <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="var(--text-secondary)" />
+                          <YAxis tick={{ fontSize: 11 }} stroke="var(--text-secondary)" />
+                          <Tooltip contentStyle={{ backgroundColor: 'var(--surface)', border: '1px solid var(--text-secondary)', borderRadius: '6px', fontSize: '12px' }} />
+                          <Legend />
+                          <Line type="monotone" dataKey="predicted" stroke="var(--brand-green)" strokeWidth={2} dot={{ fill: 'var(--brand-green)', r: 3 }} name={lang === 'BN' ? 'পূর্বাভাস' : 'Forecast'} />
+                          <Line type="monotone" dataKey="upperBound" stroke="#3B82F6" strokeWidth={1} strokeDasharray="5 5" dot={false} name={lang === 'BN' ? 'উচ্চ সীমা' : 'Upper Bound'} />
+                          <Line type="monotone" dataKey="lowerBound" stroke="#F59E0B" strokeWidth={1} strokeDasharray="5 5" dot={false} name={lang === 'BN' ? 'নিম্ন সীমা' : 'Lower Bound'} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+
+                  <div className="bg-brand-green/5 border border-brand-green/20 rounded-custom p-4 mt-4">
+                    <p className="text-xs text-brand-green font-semibold">{aiForecastData.recommendation}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Forecast Summaries */}
+              {aiForecastSummaries.length > 0 && (
+                <div>
+                  <h3 className="text-base font-black mb-4 flex items-center gap-1.5"><Package className="w-4 h-4 text-brand-green" /> {lang === 'BN' ? 'ফসল ভিত্তিক পূর্বাভাস' : 'Crop-wise Forecast'}</h3>
+                  <div className="grid md:grid-cols-3 gap-4">
+                    {aiForecastSummaries.map((s: any) => (
+                      <div key={s.cropType} className={`bg-surface border rounded-custom p-4 ${
+                        s.shortageRisk ? 'border-danger/30' : 'border-text-secondary/10'
+                      }`}>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-black">{s.cropType.toUpperCase()}</span>
+                          {s.shortageRisk && <span className="px-2 py-0.5 rounded bg-danger/10 text-danger text-xs font-bold border border-danger/20">{lang === 'BN' ? 'সংকট' : 'SHORTAGE'}</span>}
+                        </div>
+                        <div className="text-xs text-text-secondary space-y-1">
+                          <div className="flex justify-between"><span>{lang === 'BN' ? 'বর্তমান' : 'Current'}:</span><span className="font-mono font-bold">{s.currentDemand}</span></div>
+                          <div className="flex justify-between"><span>{lang === 'BN' ? 'পূর্বাভাস' : 'Predicted'}:</span><span className="font-mono font-bold">{s.predictedDemand}</span></div>
+                          <div className="flex justify-between"><span>{lang === 'BN' ? 'পরিবর্তন' : 'Change'}:</span><span className={`font-mono font-bold ${s.changePercent > 0 ? 'text-success' : 'text-danger'}`}>{s.changePercent > 0 ? '+' : ''}{s.changePercent}%</span></div>
+                        </div>
+                        <p className="text-xs text-text-secondary mt-2 leading-relaxed">{s.recommendation}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {(currentHash === '#/admin' || !['#/admin/prices', '#/admin/cards', '#/admin/disputes', '#/admin/settings', '#/admin/analytics', '#/admin/ai'].includes(currentHash)) && (
             <div className="animate-slide-up">
               {/* Admin stats */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-12">
@@ -3743,6 +4154,80 @@ export default function KrishiDam() {
                 </button>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* New Complaint Modal */}
+      {showNewComplaintModal && (
+        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-6" onClick={() => setShowNewComplaintModal(false)}>
+          <div className="bg-surface border border-text-secondary/15 rounded-custom shadow-xl max-w-md w-full p-6 animate-scale-in flex flex-col gap-4" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center">
+              <h2 className="text-lg font-black flex items-center gap-2"><FileText className="w-5 h-5 text-brand-green" /> {lang === 'BN' ? 'নতুন অভিযোগ দায়ের' : 'File New Complaint'}</h2>
+              <button className="text-text-secondary/80 hover:text-text-primary bg-transparent border-none cursor-pointer" onClick={() => setShowNewComplaintModal(false)}>
+                <XCircle className="w-5.5 h-5.5" />
+              </button>
+            </div>
+            <form onSubmit={handleCreateComplaint} className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-text-secondary uppercase tracking-wider">{lang === 'BN' ? 'শিরোনাম' : 'Title'}</label>
+                <input
+                  type="text"
+                  required
+                  placeholder={lang === 'BN' ? 'অভিযোগের সংক্ষিপ্ত শিরোনাম' : 'Brief complaint title'}
+                  value={complaintForm.title}
+                  onChange={e => setComplaintForm(prev => ({ ...prev, title: e.target.value }))}
+                  className="w-full bg-background border border-text-secondary/15 focus:border-brand-green outline-none rounded-custom px-3 py-2 text-sm text-text-primary"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-text-secondary uppercase tracking-wider">{lang === 'BN' ? 'বিবরণ' : 'Description'}</label>
+                <textarea
+                  required
+                  rows={4}
+                  placeholder={lang === 'BN' ? 'অভিযোগের বিস্তারিত বিবরণ লিখুন...' : 'Describe the complaint in detail...'}
+                  value={complaintForm.description}
+                  onChange={e => setComplaintForm(prev => ({ ...prev, description: e.target.value }))}
+                  className="w-full bg-background border border-text-secondary/15 focus:border-brand-green outline-none rounded-custom px-3 py-2 text-sm text-text-primary resize-none"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-text-secondary uppercase tracking-wider">{t.district}</label>
+                  <input
+                    type="text"
+                    placeholder={lang === 'BN' ? 'জেলা' : 'District'}
+                    value={complaintForm.district}
+                    onChange={e => setComplaintForm(prev => ({ ...prev, district: e.target.value }))}
+                    className="w-full bg-background border border-text-secondary/15 focus:border-brand-green outline-none rounded-custom px-3 py-2 text-sm text-text-primary"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-text-secondary uppercase tracking-wider">{t.upazila}</label>
+                  <input
+                    type="text"
+                    placeholder={lang === 'BN' ? 'উপজেলা' : 'Upazila'}
+                    value={complaintForm.upazila}
+                    onChange={e => setComplaintForm(prev => ({ ...prev, upazila: e.target.value }))}
+                    className="w-full bg-background border border-text-secondary/15 focus:border-brand-green outline-none rounded-custom px-3 py-2 text-sm text-text-primary"
+                  />
+                </div>
+              </div>
+              <div className="bg-brand-green/5 border border-brand-green/20 rounded-custom p-3">
+                <p className="text-xs text-brand-green font-semibold flex items-center gap-1.5">
+                  <Zap className="w-3.5 h-3.5" />
+                  {lang === 'BN' ? 'AI স্বয়ংক্রিয়ভাবে বিভাগ, অগ্রাধিকার এবং ফ্রড স্কোর বিশ্লেষণ করবে।' : 'AI will automatically analyze category, priority, and fraud score.'}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setShowNewComplaintModal(false)} className="flex-1 bg-transparent border border-text-secondary/20 hover:bg-text-secondary/10 text-text-primary text-sm font-bold py-2.5 rounded-custom cursor-pointer">
+                  {t.cancelBtn}
+                </button>
+                <button type="submit" className="flex-1 bg-brand-green hover:bg-brand-dark text-background text-sm font-bold py-2.5 rounded-custom border-none cursor-pointer shadow-md">
+                  {lang === 'BN' ? 'দায়ের করুন' : 'File Complaint'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
