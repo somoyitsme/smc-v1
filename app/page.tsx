@@ -523,6 +523,7 @@ export default function KrishiDam() {
   const [chatInputPrice, setChatInputPrice] = useState('')
   const [sendingMessage, setSendingMessage] = useState(false)
   const sendingMessageRef = useRef(false)
+  const chatContainerRef = useRef<HTMLDivElement>(null)
   const [millInventories, setMillInventories] = useState<MillInventory[]>([])
   const [showInventoryModal, setShowInventoryModal] = useState(false)
   const [inventoryFormData, setInventoryFormData] = useState({
@@ -1498,6 +1499,50 @@ export default function KrishiDam() {
       setSendingMessage(false)
     }
   }
+
+  // Real-time chat polling - fetch new messages every 3 seconds when drawer is open
+  useEffect(() => {
+    if (!showNegotiationDrawer || !selectedBid) return
+
+    const pollMessages = async () => {
+      try {
+        const res = await fetch(`/api/bids?listingId=${selectedBid.listingId}`)
+        if (res.ok) {
+          const bids = await res.json()
+          const currentBid = bids.find((b: any) => b.id === selectedBid.id)
+          if (currentBid && currentBid.messages) {
+            // Only update if there are new messages
+            const currentMessageCount = selectedBid.messages?.length || 0
+            const newMessageCount = currentBid.messages.length
+            
+            if (newMessageCount > currentMessageCount) {
+              setSelectedBid(prev => {
+                if (!prev) return null
+                return { ...prev, messages: currentBid.messages }
+              })
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error polling messages:', err)
+      }
+    }
+
+    // Poll every 3 seconds
+    const interval = setInterval(pollMessages, 3000)
+    
+    // Also poll immediately when drawer opens
+    pollMessages()
+
+    return () => clearInterval(interval)
+  }, [showNegotiationDrawer, selectedBid?.id])
+
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    if (chatContainerRef.current && selectedBid?.messages) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight
+    }
+  }, [selectedBid?.messages?.length])
 
   // Create processed rice inventory
   const handleCreateInventory = async (e: React.FormEvent) => {
@@ -4466,7 +4511,13 @@ export default function KrishiDam() {
             {/* Header */}
             <div>
               <div className="flex justify-between items-center border-b border-text-secondary/10 pb-4">
-                <h2 className="text-lg font-black flex items-center gap-2 text-brand-green"><MessageSquare className="w-5 h-5 text-brand-green" /> {t.chat}</h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg font-black flex items-center gap-2 text-brand-green"><MessageSquare className="w-5 h-5 text-brand-green" /> {t.chat}</h2>
+                  <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-success/10 text-success text-[10px] font-bold border border-success/20">
+                    <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
+                    {lang === 'BN' ? 'লাইভ' : 'Live'}
+                  </span>
+                </div>
                 <button className="text-text-secondary/80 hover:text-text-primary bg-transparent border-none cursor-pointer" onClick={() => setShowNegotiationDrawer(false)}>
                   <XCircle className="w-5.5 h-5.5" />
                 </button>
@@ -4479,7 +4530,7 @@ export default function KrishiDam() {
             </div>
 
             {/* Chat Messages Log */}
-            <div className="flex-1 overflow-y-auto my-4 p-3 bg-background border border-text-secondary/5 rounded-custom flex flex-col gap-3 max-h-[50vh]">
+            <div ref={chatContainerRef} className="flex-1 overflow-y-auto my-4 p-3 bg-background border border-text-secondary/5 rounded-custom flex flex-col gap-3 max-h-[50vh]">
               {selectedBid.notes && (
                 <div className="self-start bg-text-secondary/5 text-text-primary p-2.5 rounded-custom text-xs max-w-[85%] border border-text-secondary/5">
                   <div className="font-bold text-[10px] text-text-secondary uppercase mb-0.5">Mill Initial Pitch</div>
