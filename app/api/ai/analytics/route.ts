@@ -12,6 +12,7 @@ export async function GET() {
           district: true,
           category: true,
           status: true,
+          priority: true,
           createdAt: true,
           aiFraudScore: true,
         },
@@ -32,8 +33,12 @@ export async function GET() {
       }),
       prisma.millProfile.findMany({
         include: {
-          user: { select: { trustScore: true } },
-          cardsAsMill: true,
+          user: {
+            select: {
+              trustScore: true,
+              cardsAsMill: true,
+            }
+          },
         },
       }),
       prisma.user.findMany({
@@ -53,7 +58,7 @@ export async function GET() {
       millName: m.millName,
       trustScore: m.user.trustScore,
       suspended: m.suspended,
-      yellowCards: m.cardsAsMill.filter(c => c.cardType === 'yellow' && !c.overridden).length,
+      yellowCards: m.user.cardsAsMill.filter(c => c.cardType === 'yellow' && !c.overridden).length,
       totalDeals: 0,
     }))
 
@@ -66,13 +71,44 @@ export async function GET() {
       trustScore: u.trustScore,
     }))
 
+    const transactionData = transactions.map(t => ({
+      id: t.id,
+      agreedPrice: Number(t.agreedPrice),
+      finalPrice: Number(t.finalPrice),
+      paymentStatus: t.paymentStatus,
+      deliveryStatus: t.deliveryStatus,
+      priceRevised: t.priceRevised,
+      createdAt: t.createdAt,
+      farmerId: t.farmerId,
+      millId: t.millId,
+    }))
+
+    const inventoryData = inventories.map(inv => ({
+      id: inv.id,
+      riceType: inv.riceType,
+      category: inv.category,
+      quantityKg: inv.quantityKg,
+      pricePerKg: Number(inv.pricePerKg),
+      updatedAt: inv.updatedAt,
+    }))
+
+    const listingData = listings.map(l => ({
+      id: l.id,
+      variety: l.variety,
+      cropType: l.cropType,
+      quantityKg: l.quantityKg,
+      status: l.status,
+      district: l.locationDistrict,
+      createdAt: l.createdAt,
+    }))
+
     const insights = generateInsights({
       complaints,
-      transactions,
+      transactions: transactionData,
       mills: millData,
       farmers: farmerData,
-      inventories,
-      listings,
+      inventories: inventoryData,
+      listings: listingData,
     })
 
     const complaintStats = {

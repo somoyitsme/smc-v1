@@ -11,8 +11,14 @@ export async function GET() {
       }),
       prisma.millProfile.findMany({
         include: {
-          user: { select: { id: true, name: true, trustScore: true } },
-          cardsAsMill: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+              trustScore: true,
+              cardsAsMill: true,
+            }
+          },
         },
       }),
       prisma.priceRevision.findMany({
@@ -29,8 +35,8 @@ export async function GET() {
       id: m.id,
       millName: m.millName,
       trustScore: m.user.trustScore,
-      yellowCards: m.cardsAsMill.filter(c => c.cardType === 'yellow' && !c.overridden).length,
-      redCards: m.cardsAsMill.filter(c => c.cardType === 'red' && !c.overridden).length,
+      yellowCards: m.user.cardsAsMill.filter(c => c.cardType === 'yellow' && !c.overridden).length,
+      redCards: m.user.cardsAsMill.filter(c => c.cardType === 'red' && !c.overridden).length,
       suspended: m.suspended,
       totalDeals: m.user.trustScore,
       completedDeals: 0,
