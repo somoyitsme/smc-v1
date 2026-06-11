@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Sprout, Factory, Shield, TrendingUp, Star,
   MapPin, Scale, Wheat, Clock, ArrowUpRight, ArrowDownRight,
@@ -520,6 +520,8 @@ export default function KrishiDam() {
   const [showNegotiationDrawer, setShowNegotiationDrawer] = useState(false)
   const [chatInputText, setChatInputText] = useState('')
   const [chatInputPrice, setChatInputPrice] = useState('')
+  const [sendingMessage, setSendingMessage] = useState(false)
+  const sendingMessageRef = useRef(false)
   const [millInventories, setMillInventories] = useState<MillInventory[]>([])
   const [showInventoryModal, setShowInventoryModal] = useState(false)
   const [inventoryFormData, setInventoryFormData] = useState({
@@ -960,6 +962,24 @@ export default function KrishiDam() {
     if (role === 'PRICING') fetchPlatformSettings()
   }, [role, fetchListings, fetchMarketPrices, fetchMarketStats, fetchAdminData, fetchMillInventories, fetchAdminDisputes, fetchRecentTransactions, fetchPlatformSettings, fetchAnalyticsData, fetchAllAiData])
 
+  // Sync selectedBid with listings updates to show new messages in real-time
+  useEffect(() => {
+    if (!selectedBid || !showNegotiationDrawer) return
+    for (const listing of listings) {
+      if (listing.bids) {
+        const found = listing.bids.find((b: any) => b.id === selectedBid.id)
+        if (found) {
+          const hasDifferentMessages = JSON.stringify(found.messages) !== JSON.stringify(selectedBid.messages)
+          const hasDifferentStatus = found.status !== selectedBid.status
+          if (hasDifferentMessages || hasDifferentStatus) {
+            setSelectedBid(found)
+          }
+          break
+        }
+      }
+    }
+  }, [listings, selectedBid, showNegotiationDrawer])
+
   // Calculate AI price when listing form changes
   useEffect(() => {
     if (!showNewListingModal && currentHash !== '#/farmer/post') return
@@ -1327,10 +1347,13 @@ export default function KrishiDam() {
     }
   }
 
-  // Send negotiation chat messages
   const handleSendNegotiationMessage = async () => {
-    if (!selectedBid || !chatInputText || !authUser) return
+    if (!selectedBid || !chatInputText || !authUser || sendingMessageRef.current) return
+    sendingMessageRef.current = true
+    setSendingMessage(true)
     try {
+      const trimmedText = chatInputText.trim()
+      const priceVal = chatInputPrice ? parseFloat(chatInputPrice) : null
       const res = await fetch('/api/bids', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1339,8 +1362,8 @@ export default function KrishiDam() {
           requestId: selectedBid.id,
           senderId: authUser.id,
           senderRole: role.toLowerCase(),
-          message: chatInputText,
-          priceOffered: chatInputPrice ? parseFloat(chatInputPrice) : null
+          message: trimmedText,
+          priceOffered: priceVal
         })
       })
       if (res.ok) {
@@ -1354,11 +1377,11 @@ export default function KrishiDam() {
           if (!prev) return null
           const updatedMsgs = [...(prev.messages || []), {
             id: newMsg.id,
-            senderId: authUser.id,
-            senderRole: role.toLowerCase(),
-            message: chatInputText,
-            priceOffered: chatInputPrice ? parseFloat(chatInputPrice) : null,
-            createdAt: new Date().toISOString()
+            senderId: newMsg.senderId,
+            senderRole: newMsg.senderRole,
+            message: newMsg.message,
+            priceOffered: newMsg.priceOffered ? Number(newMsg.priceOffered) : null,
+            createdAt: newMsg.createdAt
           }]
           return { ...prev, messages: updatedMsgs }
         })
@@ -1371,6 +1394,9 @@ export default function KrishiDam() {
     } catch (err) {
       console.error('Error sending message:', err)
       addToast('error', lang === 'BN' ? 'বার্তা পাঠাতে ব্যর্থ হয়েছে' : 'Failed to send message')
+    } finally {
+      sendingMessageRef.current = false
+      setSendingMessage(false)
     }
   }
 
@@ -4197,13 +4223,24 @@ export default function KrishiDam() {
                   placeholder={t.chatPlaceholder}
                   value={chatInputText}
                   onChange={e => setChatInputText(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      handleSendNegotiationMessage()
+                    }
+                  }}
                   className="flex-1 bg-background border border-text-secondary/15 rounded-custom px-3 py-2 text-xs text-text-primary focus:border-brand-green outline-none"
                 />
                 <button 
                   onClick={handleSendNegotiationMessage}
-                  className="p-2 bg-brand-green hover:bg-brand-dark text-background rounded-custom border-none cursor-pointer flex items-center justify-center"
+                  disabled={sendingMessage}
+                  className="p-2 bg-brand-green hover:bg-brand-dark text-background rounded-custom border-none cursor-pointer flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Send className="w-4 h-4 text-background" />
+                  {sendingMessage ? (
+                    <div className="w-4.5 h-4.5 border-2 border-background border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4 text-background" />
+                  )}
                 </button>
               </div>
               {role === 'FARMER' && selectedBid.status === 'PENDING' && (
