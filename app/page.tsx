@@ -2023,13 +2023,15 @@ export default function KrishiDam() {
                                 >
                                   <MessageSquare className="w-3.5 h-3.5" /> {t.negotiateBtn}
                                 </button>
-                                <button 
-                                  className="bg-brand-green hover:bg-brand-dark text-background font-bold text-xs rounded-custom px-3.5 py-2 transition-all flex items-center gap-1 cursor-pointer border-none disabled:opacity-50 disabled:cursor-not-allowed"
-                                  onClick={() => handleAcceptBid(bid.id)}
-                                  disabled={acceptingBidId === bid.id}
-                                >
-                                  <CheckCircle2 className="w-3.5 h-3.5 text-background" /> {acceptingBidId === bid.id ? (lang === 'BN' ? 'গ্রহণ করা হচ্ছে...' : 'Accepting...') : t.actionAccept}
-                                </button>
+                                {bid.status === 'PENDING' && (
+                                  <button 
+                                    className="bg-brand-green hover:bg-brand-dark text-background font-bold text-xs rounded-custom px-3.5 py-2 transition-all flex items-center gap-1 cursor-pointer border-none disabled:opacity-50 disabled:cursor-not-allowed"
+                                    onClick={() => handleAcceptBid(bid.id)}
+                                    disabled={acceptingBidId === bid.id}
+                                  >
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-background" /> {acceptingBidId === bid.id ? (lang === 'BN' ? 'গ্রহণ করা হচ্ছে...' : 'Accepting...') : t.actionAccept}
+                                  </button>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -2086,13 +2088,15 @@ export default function KrishiDam() {
                         >
                           <MessageSquare className="w-3.5 h-3.5" /> {t.negotiateBtn}
                         </button>
-                        <button 
-                          className="bg-brand-green hover:bg-brand-dark text-background font-bold text-xs rounded-custom px-3.5 py-2 transition-all flex items-center gap-1 cursor-pointer border-none disabled:opacity-50 disabled:cursor-not-allowed"
-                          onClick={() => handleAcceptBid(bid.id)}
-                          disabled={acceptingBidId === bid.id}
-                        >
-                          <CheckCircle2 className="w-3.5 h-3.5 text-background" /> {acceptingBidId === bid.id ? (lang === 'BN' ? 'গ্রহণ করা হচ্ছে...' : 'Accepting...') : t.actionAccept}
-                        </button>
+                        {bid.status === 'PENDING' && (
+                          <button 
+                            className="bg-brand-green hover:bg-brand-dark text-background font-bold text-xs rounded-custom px-3.5 py-2 transition-all flex items-center gap-1 cursor-pointer border-none disabled:opacity-50 disabled:cursor-not-allowed"
+                            onClick={() => handleAcceptBid(bid.id)}
+                            disabled={acceptingBidId === bid.id}
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5 text-background" /> {acceptingBidId === bid.id ? (lang === 'BN' ? 'গ্রহণ করা হচ্ছে...' : 'Accepting...') : t.actionAccept}
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
