@@ -1049,23 +1049,37 @@ export default function KrishiDam() {
     if (role === 'PRICING') fetchPlatformSettings()
   }, [role, fetchListings, fetchMarketPrices, fetchMarketStats, fetchAdminData, fetchMillInventories, fetchAdminDisputes, fetchRecentTransactions, fetchPlatformSettings, fetchAnalyticsData, fetchAllAiData])
 
-  // Sync selectedBid with listings updates to show new messages in real-time
+  // Sync listings with selectedBid updates so that the dashboard reflects new messages/prices in real-time
   useEffect(() => {
-    if (!selectedBid || !showNegotiationDrawer) return
-    for (const listing of listings) {
-      if (listing.bids) {
-        const found = listing.bids.find((b: any) => b.id === selectedBid.id)
-        if (found) {
-          const hasDifferentMessages = JSON.stringify(found.messages) !== JSON.stringify(selectedBid.messages)
-          const hasDifferentStatus = found.status !== selectedBid.status
-          if (hasDifferentMessages || hasDifferentStatus) {
-            setSelectedBid(found)
+    if (!selectedBid) return
+    
+    setListings(prevListings => {
+      let updated = false
+      const updatedListings = prevListings.map(listing => {
+        if (listing.id === selectedBid.listingId && listing.bids) {
+          const updatedBids = listing.bids.map((b: any) => {
+            if (b.id === selectedBid.id) {
+              const hasChanged = b.status !== selectedBid.status ||
+                Number(b.pricePerMaund) !== Number(selectedBid.pricePerMaund) ||
+                JSON.stringify(b.messages) !== JSON.stringify(selectedBid.messages)
+              
+              if (hasChanged) {
+                updated = true
+                return { ...b, ...selectedBid }
+              }
+            }
+            return b
+          })
+          if (updated) {
+            return { ...listing, bids: updatedBids }
           }
-          break
         }
-      }
-    }
-  }, [listings, selectedBid, showNegotiationDrawer])
+        return listing
+      })
+      
+      return updated ? updatedListings : prevListings
+    })
+  }, [selectedBid])
 
   // Calculate AI price when listing form changes
   useEffect(() => {
@@ -1596,7 +1610,20 @@ export default function KrishiDam() {
               
               merged.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
               
-              return { ...prev, messages: merged }
+              const hasChanged = 
+                prev.status !== currentBid.status ||
+                prev.pricePerMaund !== currentBid.pricePerMaund ||
+                JSON.stringify(prev.messages) !== JSON.stringify(merged)
+              
+              if (!hasChanged) return prev
+              
+              return { 
+                ...prev, 
+                status: currentBid.status, 
+                pricePerMaund: currentBid.pricePerMaund,
+                totalPrice: currentBid.totalPrice,
+                messages: merged 
+              }
             })
           }
         }
@@ -4605,22 +4632,39 @@ export default function KrishiDam() {
                           if (currentBid && currentBid.messages) {
                             setSelectedBid(prev => {
                               if (!prev) return null
-                              const localMessageIds = new Set(
-                                (prev.messages || [])
-                                  .filter(msg => !msg.id.startsWith('temp-'))
-                                  .map(msg => msg.id)
-                              )
-                              const newMessages = currentBid.messages.filter(
-                                (msg: any) => !localMessageIds.has(msg.id)
-                              )
-                              if (newMessages.length > 0) {
-                                const mergedMessages = [
-                                  ...(prev.messages || []),
-                                  ...newMessages
-                                ].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-                                return { ...prev, messages: mergedMessages }
+                              
+                              const incomingMessages = currentBid.messages || []
+                              const localMessages = prev.messages || []
+                              
+                              const merged: any[] = [...incomingMessages]
+                              const tempMessages = localMessages.filter(msg => msg.id.startsWith('temp-'))
+                              for (const temp of tempMessages) {
+                                const alreadyReceived = incomingMessages.some((srv: any) => 
+                                  srv.senderId === temp.senderId &&
+                                  srv.message === temp.message &&
+                                  Math.abs(new Date(srv.createdAt).getTime() - new Date(temp.createdAt).getTime()) < 300000
+                                )
+                                if (!alreadyReceived) {
+                                  merged.push(temp)
+                                }
                               }
-                              return prev
+                              
+                              merged.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+                              
+                              const hasChanged = 
+                                prev.status !== currentBid.status ||
+                                prev.pricePerMaund !== currentBid.pricePerMaund ||
+                                JSON.stringify(prev.messages) !== JSON.stringify(merged)
+                              
+                              if (!hasChanged) return prev
+                              
+                              return { 
+                                ...prev, 
+                                status: currentBid.status, 
+                                pricePerMaund: currentBid.pricePerMaund,
+                                totalPrice: currentBid.totalPrice,
+                                messages: merged 
+                              }
                             })
                             addToast('success', lang === 'BN' ? 'বার্তা আপডেট করা হয়েছে' : 'Messages refreshed')
                           }
