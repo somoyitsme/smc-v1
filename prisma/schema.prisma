@@ -69,6 +69,7 @@ enum DeliveryStatus {
 enum CardType {
   yellow
   red
+  green
 }
 
 enum ReasonType {

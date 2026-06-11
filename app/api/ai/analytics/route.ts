@@ -6,15 +6,41 @@ export async function GET() {
   try {
     const [complaints, transactions, mills, users, inventories, listings] = await Promise.all([
       prisma.complaint.findMany({
-        orderBy: { createdAt: 'desc' },
+        orderBy: { aiFraudScore: 'desc' },
         select: {
           id: true,
+          title: true,
+          description: true,
           district: true,
           category: true,
           status: true,
           priority: true,
           createdAt: true,
           aiFraudScore: true,
+          aiCategory: true,
+          aiPriority: true,
+          aiSummary: true,
+          aiSuggestion: true,
+          filedBy: true,
+          targetUserId: true,
+          filedByUser: {
+            select: {
+              id: true,
+              name: true,
+              district: true,
+            }
+          },
+          targetUser: {
+            select: {
+              id: true,
+              name: true,
+              millProfile: {
+                select: {
+                  millName: true,
+                }
+              }
+            }
+          }
         },
       }),
       prisma.transaction.findMany({
@@ -141,6 +167,7 @@ export async function GET() {
       insights,
       complaintStats,
       fraudStats,
+      complaintsByRisk: complaints,
       generatedAt: new Date().toISOString(),
     })
   } catch (err: any) {

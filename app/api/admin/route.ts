@@ -273,8 +273,8 @@ export async function POST(request: Request) {
     const { type, adminId, targetUserId, reason } = body
 
     // 1. Issuing cards
-    if (type === 'YELLOW_CARD' || type === 'RED_CARD') {
-      const cardTypeMapped = type === 'YELLOW_CARD' ? 'yellow' : 'red'
+    if (type === 'YELLOW_CARD' || type === 'RED_CARD' || type === 'GREEN_CARD') {
+      const cardTypeMapped = type === 'YELLOW_CARD' ? 'yellow' : type === 'RED_CARD' ? 'red' : 'green'
 
       // Create card log
       const card = await prisma.millCard.create({
@@ -294,7 +294,7 @@ export async function POST(request: Request) {
           where: { id: targetUserId },
           data: { trustScore: { decrement: 10 } }
         })
-      } else {
+      } else if (type === 'RED_CARD') {
         await prisma.user.update({
           where: { id: targetUserId },
           data: { trustScore: 0 }
@@ -308,13 +308,26 @@ export async function POST(request: Request) {
             suspendedAt: new Date()
           }
         })
+      } else if (type === 'GREEN_CARD') {
+        // Green card improves reputation - increment trust score by 5 (cap at 100)
+        const user = await prisma.user.findUnique({
+          where: { id: targetUserId },
+          select: { trustScore: true }
+        })
+        if (user) {
+          const newTrustScore = Math.min(100, user.trustScore + 5)
+          await prisma.user.update({
+            where: { id: targetUserId },
+            data: { trustScore: newTrustScore }
+          })
+        }
       }
 
       // Record admin action audit log
       const action = await prisma.adminAction.create({
         data: {
           adminId,
-          actionType: type === 'YELLOW_CARD' ? 'yellow_card_issued' : 'red_card_issued',
+          actionType: type === 'YELLOW_CARD' ? 'yellow_card_issued' : type === 'RED_CARD' ? 'red_card_issued' : 'green_card_issued',
           targetType: 'mill',
           targetId: targetUserId,
           description: `Issued ${type} to user. Reason: ${reason}`

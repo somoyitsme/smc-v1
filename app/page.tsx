@@ -1486,7 +1486,7 @@ export default function KrishiDam() {
     }
   }
 
-  const handleIssueCard = async (type: 'YELLOW_CARD' | 'RED_CARD', reason: string) => {
+  const handleIssueCard = async (type: 'YELLOW_CARD' | 'RED_CARD' | 'GREEN_CARD', reason: string) => {
     if (!cardTarget || !authUser) return
     try {
       const res = await fetch('/api/admin', {
@@ -1819,6 +1819,16 @@ export default function KrishiDam() {
             >
               {lang === 'BN' ? 'দরপ্রস্তাব সমূহ' : 'Mill Offers & Requests'}
             </button>
+            <button 
+              onClick={() => window.location.hash = '#/farmer/complaints'}
+              className={`pb-2 text-sm font-bold border-b-2 transition-all cursor-pointer bg-transparent border-none whitespace-nowrap ${
+                currentHash === '#/farmer/complaints' 
+                  ? 'border-brand-green text-brand-green' 
+                  : 'border-transparent text-text-secondary hover:text-brand-green'
+              }`}
+            >
+              {lang === 'BN' ? 'অভিযোগ' : 'Complaints'}
+            </button>
           </div>
 
           {/* Sub View Contents */}
@@ -2113,7 +2123,93 @@ export default function KrishiDam() {
             </div>
           )}
 
-          {(currentHash === '#/farmer' || !['#/farmer/post', '#/farmer/listings', '#/farmer/requests'].includes(currentHash)) && (
+          {/* Farmer Complaints View */}
+          {currentHash === '#/farmer/complaints' && (
+            <div className="animate-slide-up flex flex-col gap-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-black flex items-center gap-2"><AlertTriangle className="w-5 h-5 text-danger" /> {lang === 'BN' ? 'আমার অভিযোগসমূহ' : 'My Complaints'}</h2>
+                <button 
+                  onClick={() => setShowNewComplaintModal(true)}
+                  className="bg-danger hover:bg-danger/90 text-background font-bold text-sm rounded-custom px-4 py-2 flex items-center gap-2 shadow-md cursor-pointer border-none"
+                >
+                  <Plus className="w-4 h-4 text-background" /> {lang === 'BN' ? 'নতুন অভিযোগ' : 'New Complaint'}
+                </button>
+              </div>
+
+              {/* My Complaints List */}
+              <div className="flex flex-col gap-4">
+                {aiComplaints.filter(c => c.filedBy === authUser?.id).length > 0 ? (
+                  aiComplaints.filter(c => c.filedBy === authUser?.id).map((complaint: any) => (
+                    <div key={complaint.id} className="bg-surface border border-text-secondary/15 rounded-custom p-5 shadow-sm flex flex-col gap-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className={`px-2 py-0.5 rounded text-xs font-bold border ${
+                              complaint.aiCategory === 'fraud' ? 'bg-danger/10 text-danger border-danger/20' :
+                              complaint.aiCategory === 'overpricing' ? 'bg-warning/10 text-warning border-warning/20' :
+                              complaint.aiCategory === 'delivery_issue' ? 'bg-info/10 text-info border-info/20' :
+                              complaint.aiCategory === 'product_quality' ? 'bg-purple-500/10 text-purple-500 border-purple-500/20' :
+                              'bg-text-secondary/10 text-text-secondary border-text-secondary/20'
+                            }`}>{complaint.aiCategory || complaint.category}</span>
+                            <span className={`px-2 py-0.5 rounded text-xs font-bold ${
+                              complaint.aiPriority === 'high' ? 'text-danger' :
+                              complaint.aiPriority === 'medium' ? 'text-warning' :
+                              'text-success'
+                            }`}>{complaint.aiPriority || complaint.priority}</span>
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-bold border ${
+                              complaint.status === 'resolved' ? 'bg-success/10 text-success border-success/20' :
+                              complaint.status === 'dismissed' ? 'bg-text-secondary/10 text-text-secondary border-text-secondary/20' :
+                              complaint.status === 'under_review' ? 'bg-info/10 text-info border-info/20' :
+                              'bg-warning/10 text-warning border-warning/20'
+                            }`}>{complaint.status}</span>
+                          </div>
+                          <h3 className="font-bold text-base mb-1">{complaint.title}</h3>
+                          <p className="text-xs text-text-secondary mb-2">{complaint.description}</p>
+                          {complaint.aiSummary && (
+                            <div className="bg-brand-green/5 border border-brand-green/20 rounded-custom p-3 mt-2">
+                              <p className="text-xs text-brand-green font-semibold">{complaint.aiSummary}</p>
+                            </div>
+                          )}
+                        </div>
+                        <div className="ml-4 text-right">
+                          <div className="text-xs text-text-secondary mb-1">{lang === 'BN' ? 'ঝুঁকি স্কোর' : 'Risk Score'}</div>
+                          <div className={`text-2xl font-black font-mono ${
+                            (complaint.aiFraudScore || 0) >= 70 ? 'text-danger' :
+                            (complaint.aiFraudScore || 0) >= 40 ? 'text-warning' :
+                            'text-success'
+                          }`}>{complaint.aiFraudScore || 0}</div>
+                        </div>
+                      </div>
+                      {complaint.aiSuggestion && (
+                        <div className="border-t border-text-secondary/10 pt-3">
+                          <p className="text-xs text-text-secondary"><strong>{lang === 'BN' ? 'পরামর্শ:' : 'Suggestion:'}</strong> {complaint.aiSuggestion}</p>
+                        </div>
+                      )}
+                      <div className="text-xs text-text-secondary/70">
+                        {lang === 'BN' ? 'দায়ের করা হয়েছে:' : 'Filed:'} {new Date(complaint.createdAt).toLocaleDateString()}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="bg-surface border border-text-secondary/10 rounded-custom p-12 text-center">
+                    <AlertTriangle className="w-12 h-12 text-text-secondary/35 mx-auto mb-4" />
+                    <h3 className="text-lg font-bold mb-1">{lang === 'BN' ? 'কোনো অভিযোগ নেই' : 'No Complaints Filed'}</h3>
+                    <p className="text-sm text-text-secondary max-w-sm mx-auto mb-6">
+                      {lang === 'BN' ? 'আপনি এখনো কোনো অভিযোগ দায়ের করেননি।' : 'You have not filed any complaints yet.'}
+                    </p>
+                    <button 
+                      onClick={() => setShowNewComplaintModal(true)}
+                      className="bg-danger hover:bg-danger/90 text-background font-bold text-sm rounded-custom px-4 py-2 flex items-center gap-2 shadow-md cursor-pointer border-none mx-auto"
+                    >
+                      <Plus className="w-4 h-4 text-background" /> {lang === 'BN' ? 'নতুন অভিযোগ দায়ের করুন' : 'File New Complaint'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {(currentHash === '#/farmer' || !['#/farmer/post', '#/farmer/listings', '#/farmer/requests', '#/farmer/complaints'].includes(currentHash)) && (
             <div className="animate-slide-up">
               {/* Farmer Stats grid */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
@@ -3228,6 +3324,11 @@ export default function KrishiDam() {
                           <td className="p-4 text-sm text-brand-green font-bold flex items-center gap-0.5"><Star className="w-3.5 h-3.5 fill-brand-green text-brand-green" /> {mill.user.trustScore}%</td>
                           <td className="p-4 text-sm font-semibold">{mill.capacityTon ? mill.capacityTon * 10 : 12}</td>
                           <td className="p-4 text-sm">
+                            {warningCards.filter(c => c.millId === (mill.userId || mill.id) && !c.overridden && c.cardType === 'green').length > 0 && (
+                              <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded bg-success/10 text-success text-xs font-bold border border-success/20 mr-1.5">
+                                <Award className="w-3 h-3" /> {warningCards.filter(c => c.millId === (mill.userId || mill.id) && !c.overridden && c.cardType === 'green').length}
+                              </span>
+                            )}
                             {warningCards.filter(c => c.millId === (mill.userId || mill.id) && !c.overridden && c.cardType === 'yellow').length > 0 && (
                               <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded bg-warning/10 text-warning text-xs font-bold border border-warning/20 mr-1.5">
                                 <AlertTriangle className="w-3 h-3" /> {warningCards.filter(c => c.millId === (mill.userId || mill.id) && !c.overridden && c.cardType === 'yellow').length}
@@ -3251,6 +3352,36 @@ export default function KrishiDam() {
                           </td>
                           <td className="p-4 text-sm text-right">
                             <div className="flex items-center justify-end gap-2">
+                              <button 
+                                className="bg-transparent border border-success/30 hover:bg-success/10 text-success text-xs font-bold rounded-custom px-2.5 py-1.5 flex items-center gap-1 cursor-pointer"
+                                onClick={async () => {
+                                  const reason = prompt(lang === 'BN' ? 'গ্রিন কার্ডের কারণ লিখুন:' : 'Enter reason for green card:')
+                                  if (reason) {
+                                    try {
+                                      const res = await fetch('/api/admin', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                          type: 'GREEN_CARD',
+                                          adminId: authUser.id,
+                                          targetUserId: mill.userId || mill.id,
+                                          reason,
+                                        }),
+                                      })
+                                      if (res.ok) {
+                                        addToast('success', lang === 'BN'
+                                          ? `${mill.millName}-কে গ্রিন কার্ড দেওয়া হয়েছে (বিশ্বস্ততা +5)`
+                                          : `Green card issued to ${mill.millName} (Trust +5)`)
+                                        fetchAdminData()
+                                      }
+                                    } catch {
+                                      addToast('error', lang === 'BN' ? 'গ্রিন কার্ড দিতে ব্যর্থ হয়েছে' : 'Failed to issue green card')
+                                    }
+                                  }
+                                }}
+                              >
+                                <Award className="w-3.5 h-3.5" /> {lang === 'BN' ? 'গ্রিন কার্ড' : 'Green Card'}
+                              </button>
                               <button 
                                 className="bg-transparent border border-warning/30 hover:bg-warning/10 text-warning text-xs font-bold rounded-custom px-2.5 py-1.5 flex items-center gap-1 cursor-pointer"
                                 onClick={() => { setCardTarget({ userId: mill.userId || mill.id, name: mill.millName }); setShowCardModal(true); }}

@@ -21,7 +21,7 @@ export async function GET(request: Request) {
 
     const complaints = await prisma.complaint.findMany({
       where,
-      orderBy: { createdAt: 'desc' },
+      orderBy: { aiFraudScore: 'desc' },
       include: {
         filedByUser: { select: { id: true, name: true, phone: true, district: true } },
         targetUser: { select: { id: true, name: true, phone: true } },
@@ -56,7 +56,7 @@ export async function GET(request: Request) {
 
     const updatedComplaints = await prisma.complaint.findMany({
       where,
-      orderBy: { createdAt: 'desc' },
+      orderBy: { aiFraudScore: 'desc' },
       include: {
         filedByUser: { select: { id: true, name: true, phone: true, district: true } },
         targetUser: { select: { id: true, name: true, phone: true } },
