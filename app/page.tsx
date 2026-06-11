@@ -12,7 +12,7 @@ import {
   Settings, CreditCard, Tag, DollarSign, PieChart
 } from 'lucide-react'
 import { auth, isFirebaseConfigured } from '@/lib/firebase'
-import { RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult } from 'firebase/auth'
+import { RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult, onAuthStateChanged, signOut } from 'firebase/auth'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from 'recharts'
 
 // ═══════════════════════════════════════════════════════════════
@@ -559,6 +559,55 @@ export default function KrishiDam() {
     setTheme('light')
     document.documentElement.classList.remove('dark')
   }, [])
+
+  // Firebase Auth State Listener - Restore session on page refresh
+  useEffect(() => {
+    if (!isFirebaseConfigured || !auth) return
+
+    let isRestoring = false
+
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser && !isRestoring && !authUser) {
+        isRestoring = true
+        try {
+          const token = await firebaseUser.getIdToken()
+          const phone = firebaseUser.phoneNumber
+
+          if (!phone) {
+            isRestoring = false
+            return
+          }
+
+          // Sync with backend to get user data
+          const syncRes = await fetch('/api/auth/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              phone,
+              role: 'FARMER', // Will be overridden by existing user's role
+              idToken: token
+            })
+          })
+
+          if (syncRes.ok) {
+            const userData = await syncRes.json()
+            // Only restore if user exists in our database (not a new user)
+            if (userData.id && userData.exists !== false) {
+              setAuthUser(userData)
+              setRole(userData.role as Role)
+              setFirebaseIdToken(token)
+            }
+          }
+        } catch (err) {
+          console.error('Error restoring auth session:', err)
+        } finally {
+          isRestoring = false
+        }
+      }
+    })
+
+    return () => unsubscribe()
+  }, [authUser])
 
   const addToast = useCallback((type: Toast['type'], message: string) => {
     const id = Date.now().toString()
@@ -1224,10 +1273,23 @@ export default function KrishiDam() {
     }
   }
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    // Sign out from Firebase
+    if (isFirebaseConfigured && auth) {
+      try {
+        await signOut(auth)
+      } catch (err) {
+        console.error('Error signing out from Firebase:', err)
+      }
+    }
+
+    // Clear local state
     setAuthUser(null)
     setRole('LANDING')
-    addToast('success', lang === 'BN' ? 'সফলভাবে লগআউট করা হয়েছে' : 'Successfully logged out')
+    setFirebaseIdToken('')
+    setConfirmationResult(null)
+    window.location.hash = '#/'
+    addToast('success', lang === 'BN' ? 'সফলভাবে লগআউট করা হয়েছে' : 'Successfully logged out')
   }
 
   // Intercept dashboard actions to enforce auth
