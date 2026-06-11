@@ -1549,48 +1549,46 @@ export default function KrishiDam() {
     }
   }
 
-  // Real-time chat polling - fetch new messages every 3 seconds when drawer is open
+  // Real-time chat polling - fetch new messages every 2 seconds when drawer is open
   useEffect(() => {
     if (!showNegotiationDrawer || !selectedBid) return
 
     const pollMessages = async () => {
       try {
-        const res = await fetch(`/api/bids?listingId=${selectedBid.listingId}`)
+        // Use the new efficient endpoint to fetch only this specific bid
+        const res = await fetch(`/api/bids?bidId=${selectedBid.id}`)
         if (res.ok) {
-          const bids = await res.json()
-          const currentBid = bids.find((b: any) => b.id === selectedBid.id)
+          const currentBid = await res.json()
+          
           if (currentBid && currentBid.messages) {
-            // Get local message IDs (excluding temporary ones)
-            const localMessageIds = new Set(
-              (selectedBid.messages || [])
-                .filter(msg => !msg.id.startsWith('temp-'))
-                .map(msg => msg.id)
-            )
-            
-            // Find messages from server that we don't have locally
-            const newMessages = currentBid.messages.filter(
-              (msg: any) => !localMessageIds.has(msg.id)
-            )
-            
-            // Only update if there are genuinely new messages from the other party
-            if (newMessages.length > 0) {
-              setSelectedBid(prev => {
-                if (!prev) return null
-                // Merge local messages (including optimistic ones) with new server messages
-                const allMessageIds = new Set([
-                  ...(prev.messages || []).map(msg => msg.id),
-                  ...newMessages.map((msg: any) => msg.id)
-                ])
-                
-                // Combine and sort by createdAt
+            // Use functional update to get latest state
+            setSelectedBid(prev => {
+              if (!prev) return null
+              
+              // Get local message IDs (excluding temporary ones)
+              const localMessageIds = new Set(
+                (prev.messages || [])
+                  .filter(msg => !msg.id.startsWith('temp-'))
+                  .map(msg => msg.id)
+              )
+              
+              // Find messages from server that we don't have locally
+              const newMessages = currentBid.messages.filter(
+                (msg: any) => !localMessageIds.has(msg.id)
+              )
+              
+              // If there are new messages, merge and sort
+              if (newMessages.length > 0) {
                 const mergedMessages = [
                   ...(prev.messages || []),
                   ...newMessages
                 ].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
                 
                 return { ...prev, messages: mergedMessages }
-              })
-            }
+              }
+              
+              return prev
+            })
           }
         }
       } catch (err) {
@@ -4588,9 +4586,50 @@ export default function KrishiDam() {
                     {lang === 'BN' ? 'লাইভ' : 'Live'}
                   </span>
                 </div>
-                <button className="text-text-secondary/80 hover:text-text-primary bg-transparent border-none cursor-pointer" onClick={() => setShowNegotiationDrawer(false)}>
-                  <XCircle className="w-5.5 h-5.5" />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={async () => {
+                      try {
+                        const res = await fetch(`/api/bids?bidId=${selectedBid.id}`)
+                        if (res.ok) {
+                          const currentBid = await res.json()
+                          if (currentBid && currentBid.messages) {
+                            setSelectedBid(prev => {
+                              if (!prev) return null
+                              const localMessageIds = new Set(
+                                (prev.messages || [])
+                                  .filter(msg => !msg.id.startsWith('temp-'))
+                                  .map(msg => msg.id)
+                              )
+                              const newMessages = currentBid.messages.filter(
+                                (msg: any) => !localMessageIds.has(msg.id)
+                              )
+                              if (newMessages.length > 0) {
+                                const mergedMessages = [
+                                  ...(prev.messages || []),
+                                  ...newMessages
+                                ].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+                                return { ...prev, messages: mergedMessages }
+                              }
+                              return prev
+                            })
+                            addToast('success', lang === 'BN' ? 'বার্তা আপডেট করা হয়েছে' : 'Messages refreshed')
+                          }
+                        }
+                      } catch (err) {
+                        console.error('Error refreshing messages:', err)
+                        addToast('error', lang === 'BN' ? 'আপডেট করতে ব্যর্থ' : 'Failed to refresh')
+                      }
+                    }}
+                    className="p-1.5 hover:bg-text-secondary/10 rounded-custom transition-all bg-transparent border-none cursor-pointer"
+                    title={lang === 'BN' ? 'রিফ্রেশ' : 'Refresh'}
+                  >
+                    <Activity className="w-4 h-4 text-brand-green" />
+                  </button>
+                  <button className="text-text-secondary/80 hover:text-text-primary bg-transparent border-none cursor-pointer" onClick={() => setShowNegotiationDrawer(false)}>
+                    <XCircle className="w-5.5 h-5.5" />
+                  </button>
+                </div>
               </div>
               <div className="bg-background border border-text-secondary/5 p-3 rounded-custom mt-4 text-xs flex flex-col gap-1">
                 <span className="font-bold text-text-primary">{selectedBid.mill.millName}</span>

@@ -8,6 +8,68 @@ export async function GET(request: Request) {
     const listingId = searchParams.get('listingId')
     const millId = searchParams.get('millId')
     const farmerId = searchParams.get('farmerId')
+    const bidId = searchParams.get('bidId') // New: fetch specific bid
+
+    // If bidId is provided, fetch only that specific bid with messages
+    if (bidId) {
+      const contactRequest = await prisma.contactRequest.findUnique({
+        where: { id: bidId },
+        include: {
+          listing: true,
+          mill: {
+            include: {
+              millProfile: true
+            }
+          },
+          messages: {
+            orderBy: { createdAt: 'asc' }
+          }
+        }
+      })
+
+      if (!contactRequest) {
+        return NextResponse.json({ error: 'Bid not found' }, { status: 404 })
+      }
+
+      const listingQuantity = contactRequest.listing ? contactRequest.listing.quantityKg / 40 : 50
+      const mappedBid = {
+        id: contactRequest.id,
+        listingId: contactRequest.listingId,
+        pricePerMaund: Number(contactRequest.offeredPrice),
+        totalPrice: Number(contactRequest.offeredPrice) * listingQuantity,
+        notes: contactRequest.message,
+        status: contactRequest.status.toUpperCase(),
+        createdAt: contactRequest.createdAt.toISOString(),
+        mill: {
+          id: contactRequest.millId,
+          millName: (contactRequest.mill.millProfile as any)?.millName || contactRequest.mill.name || 'Mill Owner',
+          rating: 5.0,
+          totalDeals: (contactRequest.mill.millProfile as any)?.completedDeals || 0,
+          yellowCards: 0,
+          user: {
+            name: contactRequest.mill.name || 'Mill Owner',
+            nameBn: null
+          }
+        },
+        messages: contactRequest.messages.map(msg => ({
+          id: msg.id,
+          senderId: msg.senderId,
+          senderRole: msg.senderRole,
+          message: msg.message,
+          priceOffered: msg.priceOffered ? Number(msg.priceOffered) : null,
+          createdAt: msg.createdAt.toISOString()
+        })),
+        listing: contactRequest.listing ? {
+          variety: contactRequest.listing.variety,
+          quantity: listingQuantity,
+          district: contactRequest.listing.locationDistrict,
+          status: contactRequest.listing.status.toUpperCase(),
+          aiFloorPrice: Number(contactRequest.listing.aiFloorPrice)
+        } : null
+      }
+
+      return NextResponse.json(mappedBid)
+    }
 
     const contactRequests = await prisma.contactRequest.findMany({
       where: {
