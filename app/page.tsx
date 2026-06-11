@@ -627,24 +627,24 @@ export default function KrishiDam() {
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 5000)
   }, [])
 
-  const fetchListings = useCallback(async () => {
-    setLoading(true)
+  const fetchListings = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true)
     try {
       const res = await fetch('/api/listings')
       if (!res.ok) {
-        addToast('error', lang === 'BN' ? 'লিস্টিং লোড করতে ব্যর্থ হয়েছে' : 'Failed to load listings')
+        if (!silent) addToast('error', lang === 'BN' ? 'লিস্টিং লোড করতে ব্যর্থ হয়েছে' : 'Failed to load listings')
         return
       }
       const data = await res.json()
       if (Array.isArray(data)) {
         setListings(data)
       } else {
-        addToast('error', lang === 'BN' ? 'লিস্টিং লোড করতে ব্যর্থ হয়েছে' : 'Failed to load listings')
+        if (!silent) addToast('error', lang === 'BN' ? 'লিস্টিং লোড করতে ব্যর্থ হয়েছে' : 'Failed to load listings')
       }
     } catch {
-      addToast('error', lang === 'BN' ? 'লিস্টিং লোড করতে ব্যর্থ হয়েছে' : 'Failed to load listings')
+      if (!silent) addToast('error', lang === 'BN' ? 'লিস্টিং লোড করতে ব্যর্থ হয়েছে' : 'Failed to load listings')
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [addToast, lang])
 
@@ -1513,10 +1513,19 @@ export default function KrishiDam() {
               createdAt: newMsg.createdAt
             } : msg
           )
-          return { ...prev, messages: updatedMsgs }
+          
+          // Deduplicate just in case pollMessages already inserted it
+          const seenIds = new Set()
+          const uniqueMsgs = updatedMsgs.filter(msg => {
+            if (seenIds.has(msg.id)) return false
+            seenIds.add(msg.id)
+            return true
+          })
+          
+          return { ...prev, messages: uniqueMsgs }
         })
 
-        fetchListings()
+        fetchListings(true)
       } else {
         // Remove optimistic message on error
         setSelectedBid(prev => {
@@ -1565,29 +1574,29 @@ export default function KrishiDam() {
             setSelectedBid(prev => {
               if (!prev) return null
               
-              // Get local message IDs (excluding temporary ones)
-              const localMessageIds = new Set(
-                (prev.messages || [])
-                  .filter(msg => !msg.id.startsWith('temp-'))
-                  .map(msg => msg.id)
-              )
+              const incomingMessages = currentBid.messages || []
+              const localMessages = prev.messages || []
               
-              // Find messages from server that we don't have locally
-              const newMessages = currentBid.messages.filter(
-                (msg: any) => !localMessageIds.has(msg.id)
-              )
+              // We want to merge incoming database messages with local optimistic messages
+              // without duplicates. Optimistic messages (starting with 'temp-') will be dropped
+              // if a corresponding server message exists.
+              const merged: any[] = [...incomingMessages]
               
-              // If there are new messages, merge and sort
-              if (newMessages.length > 0) {
-                const mergedMessages = [
-                  ...(prev.messages || []),
-                  ...newMessages
-                ].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-                
-                return { ...prev, messages: mergedMessages }
+              const tempMessages = localMessages.filter(msg => msg.id.startsWith('temp-'))
+              for (const temp of tempMessages) {
+                const alreadyReceived = incomingMessages.some((srv: any) => 
+                  srv.senderId === temp.senderId &&
+                  srv.message === temp.message &&
+                  Math.abs(new Date(srv.createdAt).getTime() - new Date(temp.createdAt).getTime()) < 10000
+                )
+                if (!alreadyReceived) {
+                  merged.push(temp)
+                }
               }
               
-              return prev
+              merged.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+              
+              return { ...prev, messages: merged }
             })
           }
         }
@@ -4639,7 +4648,7 @@ export default function KrishiDam() {
             </div>
 
             {/* Chat Messages Log */}
-            <div ref={chatContainerRef} className="flex-1 overflow-y-auto my-4 p-3 bg-background border border-text-secondary/5 rounded-custom flex flex-col gap-3 max-h-[50vh]">
+            <div ref={chatContainerRef} className="flex-1 overflow-y-auto my-4 p-3 bg-background border border-text-secondary/5 rounded-custom flex flex-col gap-3 min-h-0">
               {selectedBid.notes && (
                 <div className="self-start bg-text-secondary/5 text-text-primary p-2.5 rounded-custom text-xs max-w-[85%] border border-text-secondary/5">
                   <div className="font-bold text-[10px] text-text-secondary uppercase mb-0.5">Mill Initial Pitch</div>
