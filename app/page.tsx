@@ -1458,9 +1458,6 @@ export default function KrishiDam() {
       console.error('Error resolving dispute:', err)
       addToast('error', lang === 'BN' ? 'নিষ্পত্তি করতে ব্যর্থ হয়েছে' : 'Failed to resolve dispute')
     }
-    } catch {
-      addToast('error', lang === 'BN' ? 'নিষ্পত্তি করতে ব্যর্থ হয়েছে' : 'Failed to resolve dispute')
-    }
   }
 
   const handleIssueCard = async (type: 'YELLOW_CARD' | 'RED_CARD', reason: string) => {
