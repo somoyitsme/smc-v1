@@ -547,6 +547,9 @@ export default function KrishiDam() {
   const [aiLoading, setAiLoading] = useState(false)
   const [showNewComplaintModal, setShowNewComplaintModal] = useState(false)
   const [complaintForm, setComplaintForm] = useState({ title: '', description: '', targetUserId: '', transactionId: '', listingId: '', district: '', upazila: '' })
+  const [viewingComplaint, setViewingComplaint] = useState<any | null>(null)
+  const [showComplaintDetailsModal, setShowComplaintDetailsModal] = useState(false)
+  const [adminNotesText, setAdminNotesText] = useState('')
   const [showMillHistoryModal, setShowMillHistoryModal] = useState(false)
   const [selectedMillForHistory, setSelectedMillForHistory] = useState<any | null>(null)
   const [millTransactionHistory, setMillTransactionHistory] = useState<any[]>([])
@@ -834,7 +837,7 @@ export default function KrishiDam() {
     }
   }
 
-  const handleUpdateComplaintStatus = async (complaintId: string, status: string) => {
+  const handleUpdateComplaintStatus = async (complaintId: string, status: string, adminNotes?: string) => {
     if (!authUser) return
     try {
       const res = await fetch('/api/ai/complaints', {
@@ -844,6 +847,7 @@ export default function KrishiDam() {
           type: 'update-status',
           complaintId,
           status,
+          adminNotes,
           resolvedBy: authUser.id,
         })
       })
@@ -2975,6 +2979,16 @@ export default function KrishiDam() {
               {lang === 'BN' ? 'বিশ্লেষণ' : 'Analytics'}
             </button>
             <button 
+              onClick={() => window.location.hash = '#/admin/complaints'}
+              className={`pb-2 text-sm font-bold border-b-2 transition-all cursor-pointer bg-transparent border-none whitespace-nowrap ${
+                currentHash === '#/admin/complaints' 
+                  ? 'border-brand-green text-brand-green' 
+                  : 'border-transparent text-text-secondary hover:text-brand-green'
+              }`}
+            >
+              {lang === 'BN' ? 'অভিযোগসমূহ' : 'Complaints'}
+            </button>
+            <button 
               onClick={() => window.location.hash = '#/admin/ai'}
               className={`pb-2 text-sm font-bold border-b-2 transition-all cursor-pointer bg-transparent border-none whitespace-nowrap flex items-center gap-1.5 ${
                 currentHash === '#/admin/ai' 
@@ -3596,7 +3610,108 @@ export default function KrishiDam() {
             </div>
           )}
 
-          {(currentHash === '#/admin' || !['#/admin/prices', '#/admin/cards', '#/admin/disputes', '#/admin/settings', '#/admin/analytics', '#/admin/ai'].includes(currentHash)) && (
+          {currentHash === '#/admin/complaints' && (
+            <div className="animate-slide-up flex flex-col gap-6">
+              <div className="flex justify-between items-center">
+                <h2 className="text-xl font-black flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-brand-green" /> 
+                  {lang === 'BN' ? 'অভিযোগসমূহ (এআই অগ্রাধিকার অনুসারে)' : 'Complaints Manager (AI Priority Sorted)'}
+                </h2>
+                <button 
+                  onClick={fetchAiComplaints} 
+                  disabled={aiLoading} 
+                  className="bg-brand-green hover:bg-brand-dark text-background text-xs font-bold px-4 py-2 rounded-custom flex items-center gap-1.5 border-none cursor-pointer disabled:opacity-50"
+                >
+                  <Activity className="w-3.5 h-3.5" /> 
+                  {aiLoading ? (lang === 'BN' ? 'লোড হচ্ছে...' : 'Loading...') : (lang === 'BN' ? 'রিফ্রেশ' : 'Refresh')}
+                </button>
+              </div>
+
+              <div className="bg-surface border border-text-secondary/10 rounded-custom p-6 shadow-sm">
+                {aiComplaints.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-text-secondary/5 border-b border-text-secondary/10 text-xs font-bold text-text-secondary uppercase tracking-wider">
+                          <th className="p-4">{lang === 'BN' ? 'অভিযোগকারী ও বিবরণ' : 'Reporter & Details'}</th>
+                          <th className="p-4">{lang === 'BN' ? 'বিবাদকারী মিল' : 'Target Mill'}</th>
+                          <th className="p-4">{lang === 'BN' ? 'এআই অগ্রাধিকার' : 'AI Priority'}</th>
+                          <th className="p-4">{lang === 'BN' ? 'ঝুঁকি স্কোর' : 'Fraud Score'}</th>
+                          <th className="p-4">{lang === 'BN' ? 'অবস্থা' : 'Status'}</th>
+                          <th className="p-4 text-right">{lang === 'BN' ? 'অ্যাকশন' : 'Actions'}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {aiComplaints.map((c: any) => (
+                          <tr key={c.id} className="border-b border-text-secondary/5 hover:bg-text-secondary/5 transition-all text-sm">
+                            <td className="p-4">
+                              <div className="font-bold text-text-primary">{c.title}</div>
+                              <p className="text-xs text-text-secondary mt-1 max-w-md line-clamp-2">{c.description}</p>
+                              <div className="text-[10px] text-text-secondary mt-1.5 flex gap-2 font-bold uppercase">
+                                <span>By: {c.filedByUser?.name || 'Farmer'}</span>
+                                <span>·</span>
+                                <span>{timeAgo(c.createdAt)}</span>
+                              </div>
+                            </td>
+                            <td className="p-4">
+                              <div className="font-semibold text-text-primary">{c.targetUser?.name || 'N/A'}</div>
+                              {c.targetUser?.phone && <div className="text-xs font-mono text-text-secondary mt-0.5">{c.targetUser.phone}</div>}
+                            </td>
+                            <td className="p-4">
+                              <span className={`px-2 py-0.5 rounded text-xs font-bold border ${
+                                c.aiPriority?.toLowerCase() === 'high' ? 'bg-danger/10 text-danger border-danger/20' :
+                                c.aiPriority?.toLowerCase() === 'medium' ? 'bg-warning/10 text-warning border-warning/20' :
+                                'bg-success/10 text-success border-success/20'
+                              } uppercase`}>
+                                {c.aiPriority || c.priority}
+                              </span>
+                            </td>
+                            <td className="p-4 font-mono font-bold">
+                              <span className={
+                                (c.aiFraudScore || 0) >= 70 ? 'text-danger' :
+                                (c.aiFraudScore || 0) >= 40 ? 'text-warning' :
+                                'text-success'
+                              }>
+                                {c.aiFraudScore || 0}%
+                              </span>
+                            </td>
+                            <td className="p-4">
+                              <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                                c.status === 'resolved' ? 'bg-success/10 text-success border-success/20' :
+                                c.status === 'dismissed' ? 'bg-text-secondary/10 text-text-secondary border-text-secondary/20' :
+                                c.status === 'under_review' ? 'bg-info/10 text-info border-info/20' :
+                                'bg-warning/10 text-warning border-warning/20'
+                              } uppercase`}>
+                                {c.status}
+                              </span>
+                            </td>
+                            <td className="p-4 text-right">
+                              <button
+                                onClick={() => {
+                                  setViewingComplaint(c)
+                                  setAdminNotesText(c.adminNotes || '')
+                                  setShowComplaintDetailsModal(true)
+                                }}
+                                className="bg-brand-green/15 hover:bg-brand-green/25 text-brand-green text-xs font-bold px-3 py-1.5 rounded-custom transition-all cursor-pointer border-none"
+                              >
+                                {lang === 'BN' ? 'বিস্তারিত দেখুন' : 'View Details'}
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="py-12 text-center text-text-secondary italic">
+                    {lang === 'BN' ? 'কোনো অভিযোগ পাওয়া যায়নি' : 'No complaints found'}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {(currentHash === '#/admin' || !['#/admin/prices', '#/admin/cards', '#/admin/disputes', '#/admin/settings', '#/admin/analytics', '#/admin/ai', '#/admin/complaints'].includes(currentHash)) && (
             <div className="animate-slide-up">
               {/* Admin stats */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-12">
@@ -4453,24 +4568,33 @@ export default function KrishiDam() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3 mt-2">
+            <div className="grid grid-cols-3 gap-2 mt-2">
+              <button 
+                onClick={() => {
+                  const input = document.getElementById('card-reason-textarea') as HTMLTextAreaElement
+                  handleIssueCard('GREEN_CARD', input?.value || '')
+                }}
+                className="py-2.5 bg-success text-background hover:bg-success/95 text-[10px] font-bold rounded-custom cursor-pointer border-none flex flex-col items-center justify-center gap-1 shadow-sm transition-all"
+              >
+                <Award className="w-4 h-4 text-background" /> {lang === 'BN' ? 'সবুজ কার্ড' : 'Green Card'}
+              </button>
               <button 
                 onClick={() => {
                   const input = document.getElementById('card-reason-textarea') as HTMLTextAreaElement
                   handleIssueCard('YELLOW_CARD', input?.value || '')
                 }}
-                className="py-2.5 bg-warning text-background hover:bg-warning/95 text-xs font-bold rounded-custom cursor-pointer border-none flex items-center justify-center gap-1"
+                className="py-2.5 bg-warning text-background hover:bg-warning/95 text-[10px] font-bold rounded-custom cursor-pointer border-none flex flex-col items-center justify-center gap-1 shadow-sm transition-all"
               >
-                <AlertTriangle className="w-4 h-4 text-background" /> {t.yellowCard}
+                <AlertTriangle className="w-4 h-4 text-background" /> {lang === 'BN' ? 'হলুদ কার্ড' : 'Yellow Card'}
               </button>
               <button 
                 onClick={() => {
                   const input = document.getElementById('card-reason-textarea') as HTMLTextAreaElement
                   handleIssueCard('RED_CARD', input?.value || '')
                 }}
-                className="py-2.5 bg-danger text-background hover:bg-danger/95 text-xs font-bold rounded-custom cursor-pointer border-none flex items-center justify-center gap-1"
+                className="py-2.5 bg-danger text-background hover:bg-danger/95 text-[10px] font-bold rounded-custom cursor-pointer border-none flex flex-col items-center justify-center gap-1 shadow-sm transition-all"
               >
-                <Ban className="w-4 h-4 text-background" /> {t.redCard}
+                <Ban className="w-4 h-4 text-background" /> {lang === 'BN' ? 'লাল কার্ড' : 'Red Card'}
               </button>
             </div>
           </div>
@@ -4623,6 +4747,28 @@ export default function KrishiDam() {
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
+                  {role === 'FARMER' && selectedBid.status === 'ACCEPTED' && (
+                    <button
+                      onClick={() => {
+                        setComplaintForm({
+                          title: lang === 'BN' 
+                            ? `অভিযোগ: ${selectedBid.mill.millName}` 
+                            : `Complaint against Mill: ${selectedBid.mill.millName}`,
+                          description: '',
+                          targetUserId: selectedBid.mill.id,
+                          transactionId: '',
+                          listingId: selectedBid.listingId,
+                          district: selectedBid.listing?.district || '',
+                          upazila: ''
+                        })
+                        setShowNewComplaintModal(true)
+                      }}
+                      className="p-1.5 hover:bg-danger/10 rounded-custom transition-all bg-transparent border-none cursor-pointer flex items-center justify-center"
+                      title={lang === 'BN' ? 'অভিযোগ করুন' : 'File Complaint'}
+                    >
+                      <AlertTriangle className="w-4 h-4 text-danger" />
+                    </button>
+                  )}
                   <button 
                     onClick={async () => {
                       try {
@@ -4778,6 +4924,27 @@ export default function KrishiDam() {
                   <CheckCircle2 className="w-4 h-4 text-background" /> {acceptingBidId === selectedBid.id ? (lang === 'BN' ? 'গ্রহণ করা হচ্ছে...' : 'Accepting...') : t.actionAccept}
                 </button>
               )}
+              {role === 'FARMER' && selectedBid.status === 'ACCEPTED' && (
+                <button 
+                  onClick={() => {
+                    setComplaintForm({
+                      title: lang === 'BN' 
+                        ? `অভিযোগ: ${selectedBid.mill.millName}` 
+                        : `Complaint against Mill: ${selectedBid.mill.millName}`,
+                      description: '',
+                      targetUserId: selectedBid.mill.id,
+                      transactionId: '',
+                      listingId: selectedBid.listingId,
+                      district: selectedBid.listing?.district || '',
+                      upazila: ''
+                    })
+                    setShowNewComplaintModal(true)
+                  }}
+                  className="w-full mt-2 py-2 bg-danger text-background hover:bg-danger/90 text-xs font-bold rounded-custom border-none cursor-pointer flex items-center justify-center gap-1.5 shadow-md transition-all"
+                >
+                  <AlertTriangle className="w-4 h-4 text-background" /> {lang === 'BN' ? 'অভিযোগ করুন' : 'Complain About Mill'}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -4853,6 +5020,151 @@ export default function KrishiDam() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Complaint Details Modal */}
+      {showComplaintDetailsModal && viewingComplaint && (
+        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-6" onClick={() => setShowComplaintDetailsModal(false)}>
+          <div className="bg-surface border border-text-secondary/15 rounded-custom shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 animate-scale-in flex flex-col gap-5" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center border-b border-text-secondary/10 pb-3">
+              <h2 className="text-lg font-black flex items-center gap-2 text-brand-green">
+                <FileText className="w-5 h-5 text-brand-green" /> 
+                {lang === 'BN' ? 'অভিযোগের বিবরণ' : 'Complaint Details'}
+              </h2>
+              <button className="text-text-secondary/80 hover:text-text-primary bg-transparent border-none cursor-pointer" onClick={() => setShowComplaintDetailsModal(false)}>
+                <XCircle className="w-5.5 h-5.5" />
+              </button>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="p-3 bg-background border border-text-secondary/5 rounded-custom">
+                <div className="text-[10px] font-bold text-text-secondary uppercase">{lang === 'BN' ? 'অভিযোগকারী কৃষক' : 'Filed By (Farmer)'}</div>
+                <div className="font-bold text-text-primary mt-1 text-sm">{viewingComplaint.filedByUser?.name || 'N/A'}</div>
+                <div className="text-xs text-text-secondary mt-0.5 font-mono">{viewingComplaint.filedByUser?.phone || 'N/A'}</div>
+                {viewingComplaint.filedByUser?.district && <div className="text-xs text-text-secondary mt-0.5">District: {viewingComplaint.filedByUser.district}</div>}
+              </div>
+              <div className="p-3 bg-background border border-text-secondary/5 rounded-custom">
+                <div className="text-[10px] font-bold text-text-secondary uppercase">{lang === 'BN' ? 'অভিযুক্ত মিল' : 'Accused (Mill Owner)'}</div>
+                <div className="font-bold text-text-primary mt-1 text-sm">{viewingComplaint.targetUser?.name || 'N/A'}</div>
+                <div className="text-xs text-text-secondary mt-0.5 font-mono">{viewingComplaint.targetUser?.phone || 'N/A'}</div>
+                {viewingComplaint.targetUserId && (
+                  <button
+                    onClick={() => {
+                      setCardTarget({
+                        userId: viewingComplaint.targetUserId,
+                        name: viewingComplaint.targetUser?.name || 'Mill Owner'
+                      })
+                      setShowCardModal(true)
+                    }}
+                    className="mt-2 text-[10px] bg-warning/10 hover:bg-warning/20 text-warning font-bold py-1 px-2.5 rounded border border-warning/20 transition-all cursor-pointer flex items-center gap-1"
+                  >
+                    <AlertTriangle className="w-3.5 h-3.5" /> {lang === 'BN' ? 'কার্ড জারি করুন' : 'Issue Governance Card'}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <div className="text-[10px] font-bold text-text-secondary uppercase">{lang === 'BN' ? 'অভিযোগ শিরোনাম' : 'Complaint Title'}</div>
+              <div className="text-sm font-bold text-text-primary bg-background p-2.5 border border-text-secondary/5 rounded-custom">{viewingComplaint.title}</div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <div className="text-[10px] font-bold text-text-secondary uppercase">{lang === 'BN' ? 'অভিযোগের বিবরণ' : 'Description'}</div>
+              <div className="text-xs text-text-primary bg-background p-3 border border-text-secondary/5 rounded-custom whitespace-pre-wrap leading-relaxed">{viewingComplaint.description}</div>
+            </div>
+
+            <div className="border-t border-text-secondary/15 pt-4 flex flex-col gap-4">
+              <h3 className="text-sm font-black text-brand-green flex items-center gap-1.5">
+                <Zap className="w-4 h-4 text-brand-green" /> 
+                {lang === 'BN' ? 'এআই ট্রায়াজ এবং বিশ্লেষণ' : 'AI Triage & Analysis'}
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
+                <div className="bg-background border border-text-secondary/5 p-2 rounded-custom">
+                  <div className="text-[9px] font-bold text-text-secondary uppercase">Priority</div>
+                  <div className="text-xs font-bold text-danger uppercase mt-1">{viewingComplaint.aiPriority || viewingComplaint.priority || 'N/A'}</div>
+                </div>
+                <div className="bg-background border border-text-secondary/5 p-2 rounded-custom">
+                  <div className="text-[9px] font-bold text-text-secondary uppercase">Category</div>
+                  <div className="text-xs font-bold text-info uppercase mt-1">{viewingComplaint.aiCategory || viewingComplaint.category || 'N/A'}</div>
+                </div>
+                <div className="bg-background border border-text-secondary/5 p-2 rounded-custom">
+                  <div className="text-[9px] font-bold text-text-secondary uppercase">Fraud Score</div>
+                  <div className="text-xs font-mono font-bold text-warning mt-1">{viewingComplaint.aiFraudScore || 0}%</div>
+                </div>
+                <div className="bg-background border border-text-secondary/5 p-2 rounded-custom">
+                  <div className="text-[9px] font-bold text-text-secondary uppercase">Status</div>
+                  <div className="text-xs font-bold text-text-primary uppercase mt-1">{viewingComplaint.status || 'N/A'}</div>
+                </div>
+              </div>
+
+              {viewingComplaint.aiSummary && (
+                <div className="flex flex-col gap-1">
+                  <div className="text-[10px] font-bold text-text-secondary uppercase">{lang === 'BN' ? 'এআই সংক্ষিপ্ত বিবরণ' : 'AI Summary'}</div>
+                  <div className="text-xs text-text-primary bg-brand-green/5 p-2.5 border border-brand-green/10 rounded-custom leading-relaxed">{viewingComplaint.aiSummary}</div>
+                </div>
+              )}
+
+              {viewingComplaint.aiSuggestion && (
+                <div className="flex flex-col gap-1">
+                  <div className="text-[10px] font-bold text-text-secondary uppercase">{lang === 'BN' ? 'এআই প্রস্তাবিত পদক্ষেপ' : 'AI Suggestion'}</div>
+                  <div className="text-xs text-text-primary bg-info/5 p-2.5 border border-info/10 rounded-custom leading-relaxed">{viewingComplaint.aiSuggestion}</div>
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-text-secondary/15 pt-4 flex flex-col gap-4">
+              <h3 className="text-sm font-black text-text-primary">
+                {lang === 'BN' ? 'রুলিং ও আপডেট' : 'Ruling & Updates'}
+              </h3>
+              
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-text-secondary uppercase tracking-wider">{lang === 'BN' ? 'অবস্থা পরিবর্তন করুন' : 'Change Status'}</label>
+                <select
+                  value={viewingComplaint.status}
+                  onChange={e => setViewingComplaint({ ...viewingComplaint, status: e.target.value })}
+                  className="bg-background border border-text-secondary/15 rounded-custom px-3 py-2 text-sm text-text-primary focus:border-brand-green outline-none cursor-pointer"
+                >
+                  <option value="pending">PENDING</option>
+                  <option value="under_review">UNDER_REVIEW</option>
+                  <option value="resolved">RESOLVED</option>
+                  <option value="dismissed">DISMISSED</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-text-secondary uppercase tracking-wider">{lang === 'BN' ? 'অ্যাডমিন নোটস' : 'Admin Notes'}</label>
+                <textarea
+                  rows={3}
+                  placeholder={lang === 'BN' ? 'রুলিং এর বিবরণ বা নোটস লিখুন...' : 'Write dispute notes or admin ruling details...'}
+                  value={adminNotesText}
+                  onChange={e => setAdminNotesText(e.target.value)}
+                  className="w-full bg-background border border-text-secondary/15 focus:border-brand-green outline-none rounded-custom px-3 py-2 text-sm text-text-primary resize-none"
+                />
+              </div>
+
+              <div className="flex gap-3 mt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowComplaintDetailsModal(false)}
+                  className="flex-1 bg-transparent border border-text-secondary/20 hover:bg-text-secondary/10 text-text-primary text-sm font-bold py-2.5 rounded-custom cursor-pointer"
+                >
+                  {t.cancelBtn}
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await handleUpdateComplaintStatus(viewingComplaint.id, viewingComplaint.status, adminNotesText)
+                    setShowComplaintDetailsModal(false)
+                  }}
+                  className="flex-1 bg-brand-green hover:bg-brand-dark text-background text-sm font-bold py-2.5 rounded-custom border-none cursor-pointer shadow-md transition-all"
+                >
+                  {lang === 'BN' ? 'আপডেট সংরক্ষণ করুন' : 'Save Ruling'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

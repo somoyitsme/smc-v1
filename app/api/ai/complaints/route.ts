@@ -63,7 +63,16 @@ export async function GET(request: Request) {
       },
     })
 
-    return NextResponse.json(updatedComplaints)
+    // Sort by priority (high -> medium -> low) then by fraud score descending
+    const priorityWeights: Record<string, number> = { high: 3, medium: 2, low: 1 }
+    const sortedComplaints = [...updatedComplaints].sort((a, b) => {
+      const wA = priorityWeights[(a.aiPriority || a.priority || '').toLowerCase()] || 0
+      const wB = priorityWeights[(b.aiPriority || b.priority || '').toLowerCase()] || 0
+      if (wA !== wB) return wB - wA
+      return (b.aiFraudScore || 0) - (a.aiFraudScore || 0)
+    })
+
+    return NextResponse.json(sortedComplaints)
   } catch (err: any) {
     console.error('Error in complaints AI:', err)
     return NextResponse.json({ error: 'Internal server error', details: err.message }, { status: 500 })
