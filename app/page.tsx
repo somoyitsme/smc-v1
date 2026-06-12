@@ -1035,6 +1035,7 @@ export default function KrishiDam() {
     if (role === 'FARMER' || role === 'MILL') {
       fetchListings()
       fetchMillInventories()
+      fetchAiComplaints()
     }
     if (role === 'MARKET' || role === 'LANDING') {
       fetchMarketPrices()
@@ -1051,7 +1052,7 @@ export default function KrishiDam() {
     }
     if (role === 'MARKET') fetchListings()
     if (role === 'PRICING') fetchPlatformSettings()
-  }, [role, fetchListings, fetchMarketPrices, fetchMarketStats, fetchAdminData, fetchMillInventories, fetchAdminDisputes, fetchRecentTransactions, fetchPlatformSettings, fetchAnalyticsData, fetchAllAiData])
+  }, [role, fetchListings, fetchMarketPrices, fetchMarketStats, fetchAdminData, fetchMillInventories, fetchAdminDisputes, fetchRecentTransactions, fetchPlatformSettings, fetchAnalyticsData, fetchAllAiData, fetchAiComplaints])
 
   // Sync listings with selectedBid updates so that the dashboard reflects new messages/prices in real-time
   useEffect(() => {
