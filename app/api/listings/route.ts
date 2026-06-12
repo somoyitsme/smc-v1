@@ -2,12 +2,17 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { logAudit } from '@/lib/audit'
 
+// Cache the last time the auto-expiry routine ran to avoid executing updates on every GET request
+let lastExpiryRun = 0
+
 // GET /api/listings - Get all crop listings with filters
 export async function GET(request: Request) {
   try {
-    // Rule 5: Auto-expire active listings past their expiration time
-    try {
-      await prisma.cropListing.updateMany({
+    // Rule 5: Auto-expire active listings past their expiration time (runs in background, max once every 5 minutes)
+    const now = Date.now()
+    if (now - lastExpiryRun > 5 * 60 * 1000) {
+      lastExpiryRun = now
+      prisma.cropListing.updateMany({
         where: {
           status: 'active',
           expiresAt: { lt: new Date() }
@@ -15,9 +20,9 @@ export async function GET(request: Request) {
         data: {
           status: 'expired'
         }
+      }).catch(expErr => {
+        console.error('Listing auto-expiry routine failed:', expErr)
       })
-    } catch (expErr) {
-      console.error('Listing auto-expiry routine failed:', expErr)
     }
 
     const { searchParams } = new URL(request.url)

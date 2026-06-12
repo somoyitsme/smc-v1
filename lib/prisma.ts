@@ -16,8 +16,8 @@ function createPrismaClient() {
   if (!pool) {
     pool = new pg.Pool({ 
       connectionString,
-      max: 2, // Keep connections per instance small to prevent exhausting the Supabase pool
-      idleTimeoutMillis: 10000, // Close idle connections quickly
+      max: 20, // Keep connections per instance small to prevent exhausting the Supabase pool
+      idleTimeoutMillis: 30000, // Close idle connections quickly
     })
     globalForPrisma.pool = pool
   }
